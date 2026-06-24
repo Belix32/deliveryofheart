@@ -7,7 +7,7 @@
 ## Быстрый старт
 
 ```bash
-git clone https://github.com/belix888/deliveryheart.git
+git clone https://github.com/Belix32/deliveryofheart.git
 cd deliveryheart
 npm install
 cp .env.example .env.local
