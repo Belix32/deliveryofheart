@@ -4,9 +4,12 @@
 --
 -- Применение (Supabase Dashboard → SQL Editor → New query → Run):
 --   1. Скопируйте весь файл и выполните целиком.
---   2. После миграции назначьте роль grocery_owner владельцу магазинов
---      (см. раздел 12 в конце файла).
---   3. Опционально: раскомментируйте блок SEED в конце для тестовых данных.
+--   2. Миграция автоматически:
+--      - назначит роль grocery_owner всем пользователям с ролью admin;
+--      - создаст 2 магазина в Сураже с категориями и товарами;
+--      - добавит тестовый купон PRODUKTY10 (scope = grocery).
+--   3. Нужен хотя бы один пользователь с ролью admin в user_roles
+--      (или любой пользователь в auth.users — будет взят первый).
 --
 -- Требования: уже применены базовые таблицы (users, orders, coupons, roles,
 -- user_roles, couriers) и миграция auth/RLS (20260424000000_*).
@@ -707,6 +710,17 @@ CREATE POLICY grocery_stores_admin_delete ON grocery_stores
   FOR DELETE
   USING (public.is_admin());
 
+DROP POLICY IF EXISTS grocery_stores_admin_update ON grocery_stores;
+CREATE POLICY grocery_stores_admin_update ON grocery_stores
+  FOR UPDATE
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+DROP POLICY IF EXISTS grocery_stores_admin_select ON grocery_stores;
+CREATE POLICY grocery_stores_admin_select ON grocery_stores
+  FOR SELECT
+  USING (public.is_admin());
+
 -- grocery_categories
 DROP POLICY IF EXISTS grocery_categories_public_read ON grocery_categories;
 CREATE POLICY grocery_categories_public_read ON grocery_categories
@@ -725,6 +739,12 @@ CREATE POLICY grocery_categories_owner_manage ON grocery_categories
   USING (public.owns_grocery_store(store_id))
   WITH CHECK (public.owns_grocery_store(store_id));
 
+DROP POLICY IF EXISTS grocery_categories_admin_manage ON grocery_categories;
+CREATE POLICY grocery_categories_admin_manage ON grocery_categories
+  FOR ALL
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
 -- products
 DROP POLICY IF EXISTS products_public_read ON products;
 CREATE POLICY products_public_read ON products
@@ -742,6 +762,12 @@ CREATE POLICY products_owner_manage ON products
   FOR ALL
   USING (public.owns_grocery_store(store_id))
   WITH CHECK (public.owns_grocery_store(store_id));
+
+DROP POLICY IF EXISTS products_admin_manage ON products;
+CREATE POLICY products_admin_manage ON products
+  FOR ALL
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
 
 -- grocery_order_items
 DROP POLICY IF EXISTS grocery_order_items_select ON grocery_order_items;
@@ -785,97 +811,227 @@ CREATE POLICY orders_grocery_owner_update ON orders
 -- Клиент видит свои grocery-заказы (дополняет orders_select_own)
 -- orders_select_own уже покрывает user_id = auth.uid()
 
-COMMIT;
-
 -- =============================================================================
--- 13. НАЗНАЧЕНИЕ РОЛИ ВЛАДЕЛЬЦА (выполните вручную после регистрации пользователя)
--- =============================================================================
---
--- 1. Узнайте UUID пользователя-владельца:
---    SELECT id, email FROM auth.users WHERE email = 'owner@example.com';
---
--- 2. Назначьте роль grocery_owner:
---    INSERT INTO user_roles (user_id, role_id, is_active)
---    SELECT
---      'ВАШ_UUID_ПОЛЬЗОВАТЕЛЯ'::UUID,
---      r.id,
---      TRUE
---    FROM roles r
---    WHERE r.name = 'grocery_owner'
---    ON CONFLICT DO NOTHING;
---
--- 3. При создании магазина укажите owner_user_id = UUID владельца.
---
--- =============================================================================
--- 14. OPTIONAL SEED — тестовые магазины и товары для Суража
---     Раскомментируйте и подставьте UUID владельца перед запуском.
+-- 12. AUTO-SETUP: роли + магазины + товары (админка сразу после миграции)
 -- =============================================================================
 
-/*
 DO $$
 DECLARE
-  v_owner UUID := '00000000-0000-0000-0000-000000000000'; -- ← ЗАМЕНИТЕ
+  v_owner UUID;
   v_store1 UUID;
   v_store2 UUID;
-  v_cat_ovosh UUID;
-  v_cat_mol UUID;
-  v_cat_bak UUID;
+  v_cat1_ovosh UUID;
+  v_cat1_mol UUID;
+  v_cat1_bak UUID;
+  v_cat2_ovosh UUID;
+  v_cat2_mol UUID;
+  v_grocery_owner_role_id UUID;
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM auth.users WHERE id = v_owner) THEN
-    RAISE EXCEPTION 'Owner user % not found in auth.users', v_owner;
+  -- Владелец: первый активный admin, иначе первый пользователь auth
+  SELECT ur.user_id INTO v_owner
+  FROM user_roles ur
+  JOIN roles r ON r.id = ur.role_id
+  WHERE r.name = 'admin'
+    AND ur.is_active = TRUE
+  ORDER BY ur.assigned_at NULLS LAST, ur.created_at NULLS LAST
+  LIMIT 1;
+
+  IF v_owner IS NULL THEN
+    SELECT id INTO v_owner
+    FROM auth.users
+    ORDER BY created_at
+    LIMIT 1;
   END IF;
 
+  IF v_owner IS NULL THEN
+    RAISE NOTICE 'Grocery seed skipped: no users in auth.users. Register admin, assign role admin, re-run seed section.';
+    RETURN;
+  END IF;
+
+  SELECT id INTO v_grocery_owner_role_id FROM roles WHERE name = 'grocery_owner';
+
+  IF v_grocery_owner_role_id IS NULL THEN
+    RAISE EXCEPTION 'Role grocery_owner not found';
+  END IF;
+
+  -- grocery_owner всем admin + владельцу магазинов
+  INSERT INTO user_roles (user_id, role_id, is_active)
+  SELECT ur.user_id, v_grocery_owner_role_id, TRUE
+  FROM user_roles ur
+  JOIN roles r ON r.id = ur.role_id
+  WHERE r.name = 'admin'
+    AND ur.is_active = TRUE
+    AND NOT EXISTS (
+      SELECT 1 FROM user_roles x
+      WHERE x.user_id = ur.user_id AND x.role_id = v_grocery_owner_role_id
+    );
+
+  INSERT INTO user_roles (user_id, role_id, is_active)
+  SELECT v_owner, v_grocery_owner_role_id, TRUE
+  WHERE NOT EXISTS (
+    SELECT 1 FROM user_roles x
+    WHERE x.user_id = v_owner AND x.role_id = v_grocery_owner_role_id
+  );
+
+  RAISE NOTICE 'Grocery owner user_id: %', v_owner;
+
+  -- Магазин 1: Ленина
   INSERT INTO grocery_stores (
     owner_user_id, name, slug, city, address, phone,
     min_order_amount, delivery_price, delivery_time_min, delivery_time_max, sort_order
   ) VALUES (
-    v_owner, 'Магазин на Ленина', 'lenina', 'Сураж', 'ул. Ленина, 12', '+7 (900) 000-00-01',
-    800, 250, 30, 60, 1
+    v_owner,
+    'Магазин на Ленина',
+    'lenina',
+    'Сураж',
+    'ул. Ленина, 12',
+    '+7 (900) 000-00-01',
+    800,
+    250,
+    30,
+    60,
+    1
   )
-  ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
+  ON CONFLICT (slug) DO UPDATE SET
+    owner_user_id = EXCLUDED.owner_user_id,
+    name = EXCLUDED.name,
+    address = EXCLUDED.address,
+    min_order_amount = EXCLUDED.min_order_amount,
+    delivery_price = EXCLUDED.delivery_price,
+    is_active = TRUE
   RETURNING id INTO v_store1;
 
+  IF v_store1 IS NULL THEN
+    SELECT id INTO v_store1 FROM grocery_stores WHERE slug = 'lenina';
+  END IF;
+
+  -- Магазин 2: Советская
   INSERT INTO grocery_stores (
     owner_user_id, name, slug, city, address, phone,
     min_order_amount, delivery_price, delivery_time_min, delivery_time_max, sort_order
   ) VALUES (
-    v_owner, 'Магазин на Советской', 'sovetskaya', 'Сураж', 'ул. Советская, 5', '+7 (900) 000-00-02',
-    500, 250, 25, 50, 2
+    v_owner,
+    'Магазин на Советской',
+    'sovetskaya',
+    'Сураж',
+    'ул. Советская, 5',
+    '+7 (900) 000-00-02',
+    500,
+    250,
+    25,
+    50,
+    2
   )
-  ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
+  ON CONFLICT (slug) DO UPDATE SET
+    owner_user_id = EXCLUDED.owner_user_id,
+    name = EXCLUDED.name,
+    address = EXCLUDED.address,
+    min_order_amount = EXCLUDED.min_order_amount,
+    delivery_price = EXCLUDED.delivery_price,
+    is_active = TRUE
   RETURNING id INTO v_store2;
+
+  IF v_store2 IS NULL THEN
+    SELECT id INTO v_store2 FROM grocery_stores WHERE slug = 'sovetskaya';
+  END IF;
 
   -- Категории магазина 1
   INSERT INTO grocery_categories (store_id, name, slug, sort_order)
   VALUES (v_store1, 'Овощи', 'ovoshchi', 1)
   ON CONFLICT (store_id, slug) DO UPDATE SET name = EXCLUDED.name
-  RETURNING id INTO v_cat_ovosh;
+  RETURNING id INTO v_cat1_ovosh;
+  IF v_cat1_ovosh IS NULL THEN
+    SELECT id INTO v_cat1_ovosh FROM grocery_categories WHERE store_id = v_store1 AND slug = 'ovoshchi';
+  END IF;
 
   INSERT INTO grocery_categories (store_id, name, slug, sort_order)
   VALUES (v_store1, 'Молочка', 'molochnaya', 2)
   ON CONFLICT (store_id, slug) DO UPDATE SET name = EXCLUDED.name
-  RETURNING id INTO v_cat_mol;
+  RETURNING id INTO v_cat1_mol;
+  IF v_cat1_mol IS NULL THEN
+    SELECT id INTO v_cat1_mol FROM grocery_categories WHERE store_id = v_store1 AND slug = 'molochnaya';
+  END IF;
 
   INSERT INTO grocery_categories (store_id, name, slug, sort_order)
   VALUES (v_store1, 'Бакалея', 'bakaleya', 3)
   ON CONFLICT (store_id, slug) DO UPDATE SET name = EXCLUDED.name
-  RETURNING id INTO v_cat_bak;
+  RETURNING id INTO v_cat1_bak;
+  IF v_cat1_bak IS NULL THEN
+    SELECT id INTO v_cat1_bak FROM grocery_categories WHERE store_id = v_store1 AND slug = 'bakaleya';
+  END IF;
 
-  -- Весовые и штучные товары
+  -- Категории магазина 2
+  INSERT INTO grocery_categories (store_id, name, slug, sort_order)
+  VALUES (v_store2, 'Овощи', 'ovoshchi', 1)
+  ON CONFLICT (store_id, slug) DO UPDATE SET name = EXCLUDED.name
+  RETURNING id INTO v_cat2_ovosh;
+  IF v_cat2_ovosh IS NULL THEN
+    SELECT id INTO v_cat2_ovosh FROM grocery_categories WHERE store_id = v_store2 AND slug = 'ovoshchi';
+  END IF;
+
+  INSERT INTO grocery_categories (store_id, name, slug, sort_order)
+  VALUES (v_store2, 'Молочка', 'molochnaya', 2)
+  ON CONFLICT (store_id, slug) DO UPDATE SET name = EXCLUDED.name
+  RETURNING id INTO v_cat2_mol;
+  IF v_cat2_mol IS NULL THEN
+    SELECT id INTO v_cat2_mol FROM grocery_categories WHERE store_id = v_store2 AND slug = 'molochnaya';
+  END IF;
+
+  -- Товары магазина 1 (весовые + штучные)
   INSERT INTO products (store_id, category_id, name, sku, price, unit, quantity_step, min_quantity, stock, weight_label)
-  VALUES
-    (v_store1, v_cat_ovosh, 'Картофель', 'KRT001', 45, 'кг', 0.1, 0.1, 200, 'свежий'),
-    (v_store1, v_cat_ovosh, 'Морковь', 'MOR001', 55, 'кг', 0.1, 0.1, 80, 'свежая'),
-    (v_store1, v_cat_ovosh, 'Лук репчатый', 'LUK001', 40, 'кг', 0.1, 0.1, 100, NULL),
-    (v_store1, v_cat_mol, 'Молоко 3.2% 1л', 'MLK001', 89, 'шт', 1, 1, 40, '1 л'),
-    (v_store1, v_cat_mol, 'Сметана 20% 400г', 'SMT001', 95, 'шт', 1, 1, 25, '400 г'),
-    (v_store1, v_cat_mol, 'Яйца С0 10шт', 'EGG001', 110, 'уп', 1, 1, 20, '10 шт'),
-    (v_store1, v_cat_bak, 'Гречка', 'GRK001', 120, 'кг', 0.1, 0.1, 50, 'крупа'),
-    (v_store1, v_cat_bak, 'Рис', 'RIS001', 130, 'кг', 0.1, 0.1, 45, 'крупа'),
-    (v_store1, v_cat_bak, 'Макароны 450г', 'MKR001', 65, 'шт', 1, 1, 60, '450 г')
-  ON CONFLICT DO NOTHING;
+  SELECT v_store1, v_cat1_ovosh, 'Картофель', 'KRT001', 45, 'кг', 0.1, 0.1, 200, 'свежий'
+  WHERE NOT EXISTS (SELECT 1 FROM products WHERE store_id = v_store1 AND sku = 'KRT001');
 
-  -- Тестовый купон на продукты
+  INSERT INTO products (store_id, category_id, name, sku, price, unit, quantity_step, min_quantity, stock, weight_label)
+  SELECT v_store1, v_cat1_ovosh, 'Морковь', 'MOR001', 55, 'кг', 0.1, 0.1, 80, 'свежая'
+  WHERE NOT EXISTS (SELECT 1 FROM products WHERE store_id = v_store1 AND sku = 'MOR001');
+
+  INSERT INTO products (store_id, category_id, name, sku, price, unit, quantity_step, min_quantity, stock, weight_label)
+  SELECT v_store1, v_cat1_ovosh, 'Лук репчатый', 'LUK001', 40, 'кг', 0.1, 0.1, 100, NULL
+  WHERE NOT EXISTS (SELECT 1 FROM products WHERE store_id = v_store1 AND sku = 'LUK001');
+
+  INSERT INTO products (store_id, category_id, name, sku, price, unit, quantity_step, min_quantity, stock, weight_label)
+  SELECT v_store1, v_cat1_mol, 'Молоко 3.2% 1л', 'MLK001', 89, 'шт', 1, 1, 40, '1 л'
+  WHERE NOT EXISTS (SELECT 1 FROM products WHERE store_id = v_store1 AND sku = 'MLK001');
+
+  INSERT INTO products (store_id, category_id, name, sku, price, unit, quantity_step, min_quantity, stock, weight_label)
+  SELECT v_store1, v_cat1_mol, 'Сметана 20% 400г', 'SMT001', 95, 'шт', 1, 1, 25, '400 г'
+  WHERE NOT EXISTS (SELECT 1 FROM products WHERE store_id = v_store1 AND sku = 'SMT001');
+
+  INSERT INTO products (store_id, category_id, name, sku, price, unit, quantity_step, min_quantity, stock, weight_label)
+  SELECT v_store1, v_cat1_mol, 'Яйца С0 10шт', 'EGG001', 110, 'уп', 1, 1, 20, '10 шт'
+  WHERE NOT EXISTS (SELECT 1 FROM products WHERE store_id = v_store1 AND sku = 'EGG001');
+
+  INSERT INTO products (store_id, category_id, name, sku, price, unit, quantity_step, min_quantity, stock, weight_label)
+  SELECT v_store1, v_cat1_bak, 'Гречка', 'GRK001', 120, 'кг', 0.1, 0.1, 50, 'крупа'
+  WHERE NOT EXISTS (SELECT 1 FROM products WHERE store_id = v_store1 AND sku = 'GRK001');
+
+  INSERT INTO products (store_id, category_id, name, sku, price, unit, quantity_step, min_quantity, stock, weight_label)
+  SELECT v_store1, v_cat1_bak, 'Рис', 'RIS001', 130, 'кг', 0.1, 0.1, 45, 'крупа'
+  WHERE NOT EXISTS (SELECT 1 FROM products WHERE store_id = v_store1 AND sku = 'RIS001');
+
+  INSERT INTO products (store_id, category_id, name, sku, price, unit, quantity_step, min_quantity, stock, weight_label)
+  SELECT v_store1, v_cat1_bak, 'Макароны 450г', 'MKR001', 65, 'шт', 1, 1, 60, '450 г'
+  WHERE NOT EXISTS (SELECT 1 FROM products WHERE store_id = v_store1 AND sku = 'MKR001');
+
+  -- Товары магазина 2
+  INSERT INTO products (store_id, category_id, name, sku, price, unit, quantity_step, min_quantity, stock, weight_label)
+  SELECT v_store2, v_cat2_ovosh, 'Капуста', 'KAP001', 35, 'кг', 0.1, 0.1, 60, 'свежая'
+  WHERE NOT EXISTS (SELECT 1 FROM products WHERE store_id = v_store2 AND sku = 'KAP001');
+
+  INSERT INTO products (store_id, category_id, name, sku, price, unit, quantity_step, min_quantity, stock, weight_label)
+  SELECT v_store2, v_cat2_ovosh, 'Яблоки', 'YAB001', 90, 'кг', 0.1, 0.1, 70, 'местные'
+  WHERE NOT EXISTS (SELECT 1 FROM products WHERE store_id = v_store2 AND sku = 'YAB001');
+
+  INSERT INTO products (store_id, category_id, name, sku, price, unit, quantity_step, min_quantity, stock, weight_label)
+  SELECT v_store2, v_cat2_mol, 'Кефир 1л', 'KEF001', 75, 'шт', 1, 1, 30, '1 л'
+  WHERE NOT EXISTS (SELECT 1 FROM products WHERE store_id = v_store2 AND sku = 'KEF001');
+
+  INSERT INTO products (store_id, category_id, name, sku, price, unit, quantity_step, min_quantity, stock, weight_label)
+  SELECT v_store2, v_cat2_mol, 'Творог 9% 200г', 'TVR001', 85, 'шт', 1, 1, 25, '200 г'
+  WHERE NOT EXISTS (SELECT 1 FROM products WHERE store_id = v_store2 AND sku = 'TVR001');
+
+  -- Купон только для продуктов
   INSERT INTO coupons (code, description, scope, discount_type, discount_value, min_order_amount, is_active)
   VALUES (
     'PRODUKTY10',
@@ -886,25 +1042,35 @@ BEGIN
     500,
     TRUE
   )
-  ON CONFLICT (code) DO UPDATE SET scope = 'grocery';
+  ON CONFLICT (code) DO UPDATE SET
+    scope = 'grocery',
+    description = EXCLUDED.description,
+    discount_type = EXCLUDED.discount_type,
+    discount_value = EXCLUDED.discount_value,
+    min_order_amount = EXCLUDED.min_order_amount,
+    is_active = TRUE;
 
-  RAISE NOTICE 'Seed completed for stores % and %', v_store1, v_store2;
+  RAISE NOTICE 'Grocery setup done: stores %, %; owner %', v_store1, v_store2, v_owner;
 END $$;
-*/
+
+COMMIT;
 
 -- =============================================================================
--- 15. ПРОВЕРКА ПОСЛЕ МИГРАЦИИ
+-- 13. ПРОВЕРКА ПОСЛЕ МИГРАЦИИ
 -- =============================================================================
 --
--- SELECT table_name FROM information_schema.tables
--- WHERE table_schema = 'public'
---   AND table_name IN ('grocery_stores','grocery_categories','products','grocery_order_items');
+-- SELECT gs.name, gs.min_order_amount, u.email AS owner_email
+-- FROM grocery_stores gs
+-- JOIN auth.users u ON u.id = gs.owner_user_id;
 --
--- SELECT column_name, data_type FROM information_schema.columns
--- WHERE table_name = 'orders' AND column_name IN ('order_type','grocery_store_id');
+-- SELECT u.email, r.name AS role
+-- FROM user_roles ur
+-- JOIN auth.users u ON u.id = ur.user_id
+-- JOIN roles r ON r.id = ur.role_id
+-- WHERE r.name IN ('admin', 'grocery_owner') AND ur.is_active = TRUE;
 --
--- SELECT name FROM roles WHERE name = 'grocery_owner';
+-- SELECT store_id, COUNT(*) FROM products GROUP BY store_id;
 --
--- SELECT scope, COUNT(*) FROM coupons GROUP BY scope;
+-- SELECT code, scope FROM coupons WHERE scope = 'grocery';
 --
 -- =============================================================================
