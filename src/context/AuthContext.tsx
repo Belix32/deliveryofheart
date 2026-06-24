@@ -1,178 +1,180 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { supabase } from "@/lib/supabase";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+  useMemo,
+} from "react";
+import { createClient } from "@/lib/supabase/browser";
+import type { UserProfile } from "@/lib/database.types";
+import type { User } from "@supabase/supabase-js";
 
-interface User {
-  id: string;
+interface AuthResult {
+  success: boolean;
+  error?: string;
+}
+
+interface SignUpInput {
   email: string;
+  password: string;
+  name: string;
   phone?: string;
-  full_name?: string;
-  role: string;
-  is_verified: boolean;
 }
 
 interface AuthContextType {
-  user: User | null;
+  user: UserProfile | null;
+  authUser: User | null;
   loading: boolean;
-  signIn: (phone: string) => Promise<{ success: boolean; error?: string }>;
-  signUp: (phone: string, name: string) => Promise<{ success: boolean; error?: string }>;
+  signIn: (email: string, password: string) => Promise<AuthResult>;
+  signUp: (input: SignUpInput) => Promise<AuthResult>;
   signOut: () => Promise<void>;
-  verifyCode: (phone: string, code: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+async function syncProfile(
+  supabase: ReturnType<typeof createClient>,
+  data?: { full_name?: string; phone?: string }
+) {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session?.user) return null;
+
+  const response = await fetch("/api/auth/sync-profile", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data ?? {}),
+  });
+
+  if (!response.ok) return null;
+  const { profile } = await response.json();
+  return profile as UserProfile;
+}
+
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const supabase = useMemo(() => createClient(), []);
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [authUser, setAuthUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    checkUser();
-  }, []);
+    const loadUser = async () => {
+      const {
+        data: { user: sessionUser },
+      } = await supabase.auth.getUser();
 
-  const checkUser = async () => {
-    setLoading(true);
-    // Пробуем найти пользователя по localStorage
-    const savedUser = localStorage.getItem("user");
-    if (savedUser) {
-      try {
-        const parsed = JSON.parse(savedUser);
-        // Проверяем в БД
-        const { data } = await supabase
+      setAuthUser(sessionUser);
+
+      if (sessionUser) {
+        const { data: profile } = await supabase
           .from("users")
           .select("*")
-          .eq("id", parsed.id)
+          .eq("id", sessionUser.id)
           .single();
-        if (data) {
-          setUser(data);
+
+        if (profile) {
+          setUser(profile);
         } else {
-          localStorage.removeItem("user");
+          const synced = await syncProfile(supabase);
+          setUser(synced);
         }
-      } catch (e) {
-        localStorage.removeItem("user");
       }
-    }
-    setLoading(false);
-  };
 
-  const signUp = async (phone: string, name: string) => {
+      setLoading(false);
+    };
+
+    loadUser();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setAuthUser(session?.user ?? null);
+      if (session?.user) {
+        const { data: profile } = await supabase
+          .from("users")
+          .select("*")
+          .eq("id", session.user.id)
+          .single();
+        setUser(profile ?? null);
+      } else {
+        setUser(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [supabase]);
+
+  const signIn = async (email: string, password: string): Promise<AuthResult> => {
     try {
-      // Проверяем, не занят ли номер
-      const { data: existing } = await supabase
-        .from("users")
-        .select("id")
-        .eq("phone", phone)
-        .single();
-
-      if (existing) {
-        return { success: false, error: "Этот номер уже зарегистрирован" };
-      }
-
-      // Создаём код подтверждения (6 цифр)
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
-      
-      // Сохраняем временные данные
-      localStorage.setItem("verify_code", code);
-      localStorage.setItem("verify_phone", phone);
-      localStorage.setItem("verify_name", name);
-
-      // В реальном приложении здесь был бы API отправки SMS
-      // Пока для теста показываем код
-      console.log("Код подтверждения:", code);
-
-      // Имитируем успешную регистрацию для демо
-      const { data, error } = await supabase
-        .from("users")
-        .insert({
-          phone,
-          full_name: name,
-          email: `${phone}@phone.local`, // Временный email для БД
-          role: "user",
-          is_verified: true,
-        })
-        .select()
-        .single();
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      });
 
       if (error) {
         return { success: false, error: error.message };
       }
 
-      if (data) {
-        setUser(data);
-        localStorage.setItem("user", JSON.stringify(data));
-        return { success: true };
-      }
+      const profile = await syncProfile(supabase);
+      if (profile) setUser(profile);
 
-      return { success: false, error: "Ошибка регистрации" };
-    } catch (e: any) {
-      return { success: false, error: e.message };
-    }
-  };
-
-  const signIn = async (phone: string) => {
-    try {
-      // Ищем пользователя по номеру
-      const { data, error } = await supabase
-        .from("users")
-        .select("*")
-        .eq("phone", phone)
-        .single();
-
-      if (error || !data) {
-        return { success: false, error: "Пользователь не найден" };
-      }
-
-      // Генерируем код
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
-      localStorage.setItem("verify_code", code);
-      localStorage.setItem("verify_phone", phone);
-      
-      console.log("Код подтверждения:", code);
-
-      // Для демо-режима сразу входим
-      setUser(data);
-      localStorage.setItem("user", JSON.stringify(data));
       return { success: true };
-    } catch (e: any) {
-      return { success: false, error: e.message };
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Ошибка входа";
+      return { success: false, error: message };
     }
   };
 
-  const verifyCode = async (phone: string, code: string) => {
-    const savedCode = localStorage.getItem("verify_code");
-    const savedPhone = localStorage.getItem("verify_phone");
+  const signUp = async ({ email, password, name, phone }: SignUpInput): Promise<AuthResult> => {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim().toLowerCase(),
+        password,
+        options: {
+          data: {
+            full_name: name.trim(),
+            phone: phone || null,
+          },
+        },
+      });
 
-    if (savedCode !== code || savedPhone !== phone) {
-      return { success: false, error: "Неверный код" };
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      if (!data.session) {
+        return {
+          success: false,
+          error:
+            "Аккаунт создан, но требуется подтверждение email. Отключите подтверждение в Supabase Dashboard → Auth → Providers → Email.",
+        };
+      }
+
+      const profile = await syncProfile(supabase, {
+        full_name: name.trim(),
+        phone,
+      });
+      if (profile) setUser(profile);
+
+      return { success: true };
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Ошибка регистрации";
+      return { success: false, error: message };
     }
-
-    const { data, error } = await supabase
-      .from("users")
-      .select("*")
-      .eq("phone", phone)
-      .single();
-
-    if (error || !data) {
-      return { success: false, error: "Пользователь не найден" };
-    }
-
-    setUser(data);
-    localStorage.setItem("user", JSON.stringify(data));
-    localStorage.removeItem("verify_code");
-    localStorage.removeItem("verify_phone");
-    localStorage.removeItem("verify_name");
-
-    return { success: true };
   };
 
   const signOut = async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    localStorage.removeItem("user");
+    setAuthUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut, verifyCode }}>
+    <AuthContext.Provider value={{ user, authUser, loading, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );

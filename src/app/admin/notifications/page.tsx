@@ -54,7 +54,7 @@ const NotificationsPage: React.FC = () => {
           <div className="bg-white dark:bg-[#2D2A26] rounded-2xl w-full max-w-lg p-6">
             <h2 className="text-xl font-bold mb-4">Создать рассылку</h2>
             <div className="space-y-4">
-              <div><label className="block text-sm font-medium mb-2">Тип</label><select className="w-full px-4 py-2.5 rounded-xl bg-[#F5F3F0]"><option>Push-уведомление</option><option>Email</option><option>SMS</option></select></div>
+              <div><label className="block text-sm font-medium mb-2">Тип</label><select className="w-full px-4 py-2.5 rounded-xl bg-[#F5F3F0]"><option>Push-уведомление</option><option>Email</option></select></div>
               <div><label className="block text-sm font-medium mb-2">Заголовок</label><input type="text" className="w-full px-4 py-2.5 rounded-xl bg-[#F5F3F0]" placeholder="Заголовок" /></div>
               <div><label className="block text-sm font-medium mb-2">Текст</label><textarea className="w-full px-4 py-2.5 rounded-xl bg-[#F5F3F0]" rows={3} placeholder="Текст уведомления" /></div>
               <div><label className="block text-sm font-medium mb-2">Получатели</label><select className="w-full px-4 py-2.5 rounded-xl bg-[#F5F3F0]"><option>Все пользователи</option><option>Новые пользователи</option><option>Активные пользователи</option></select></div>

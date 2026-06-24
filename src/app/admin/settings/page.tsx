@@ -221,19 +221,10 @@ const SettingsPage: React.FC = () => {
                       <span className="absolute left-7 top-1 w-4 h-4 bg-white rounded-full" />
                     </button>
                   </div>
-                  <div className="flex items-center justify-between p-4 bg-[#F5F3F0] dark:bg-[#3D3A36] rounded-xl">
-                    <div>
-                      <p className="font-medium">SMS уведомления</p>
-                      <p className="text-sm text-[#2D2A26]/50">Отправка SMS клиентам</p>
-                    </div>
-                    <button className="relative w-12 h-6 rounded-full bg-gray-300">
-                      <span className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full" />
-                    </button>
-                  </div>
-                  <div className="flex items-center justify-between p-4 bg-[#F5F3F0] dark:bg-[#3D3A36] rounded-xl">
+                  <div className="flex items-center justify-between p-4 bg-[#F5F3F0] dark:bg-[#3D3A36] rounded-xl opacity-60">
                     <div>
                       <p className="font-medium">Уведомления о новых заказах</p>
-                      <p className="text-sm text-[#2D2A26]/50">Email/SMS при новом заказе</p>
+                      <p className="text-sm text-[#2D2A26]/50">В приложении и на email (без SMS)</p>
                     </div>
                     <button className="relative w-12 h-6 rounded-full bg-primary dark:bg-primary-dark">
                       <span className="absolute left-7 top-1 w-4 h-4 bg-white rounded-full" />

@@ -1,5 +1,10 @@
-import { supabase } from '@/lib/supabase';
-import type { Courier, CourierOrder, CourierEarnings, CourierStatsSummary } from '@/lib/types/courier';
+import { createAdminClient } from "@/lib/supabase/admin";
+import { APP_CITY } from "@/lib/config";
+import type { Courier, CourierOrder, CourierEarnings, CourierStatsSummary } from "@/lib/types/courier";
+
+function db() {
+  return createAdminClient();
+}
 
 // =====================================================
 // COURIER PROFILE OPERATIONS
@@ -11,7 +16,7 @@ import type { Courier, CourierOrder, CourierEarnings, CourierStatsSummary } from
 export async function getCourierProfile(userId: string): Promise<Courier | null> {
   console.log('[couriers.api] getCourierProfile called with userId:', userId);
   
-  const { data, error } = await supabase
+  const { data, error } = await db()
     .from('couriers')
     .select('*')
     .eq('user_id', userId)
@@ -31,7 +36,7 @@ export async function getCourierProfile(userId: string): Promise<Courier | null>
 export async function getCourierProfileById(courierId: string): Promise<Courier | null> {
   console.log('[couriers.api] getCourierProfileById called with courierId:', courierId);
   
-  const { data, error } = await supabase
+  const { data, error } = await db()
     .from('couriers')
     .select('*')
     .eq('id', courierId)
@@ -55,7 +60,7 @@ export async function upsertCourierProfile(
   console.log('[couriers.api] upsertCourierProfile called with userId:', userId, 'data:', data);
   
   // Check if profile exists
-  const { data: existing } = await supabase
+  const { data: existing } = await db()
     .from('couriers')
     .select('id')
     .eq('user_id', userId)
@@ -63,6 +68,7 @@ export async function upsertCourierProfile(
   
   const profileData = {
     user_id: userId,
+    current_city: data.current_city || APP_CITY,
     ...data,
     updated_at: new Date().toISOString(),
   };
@@ -70,7 +76,7 @@ export async function upsertCourierProfile(
   let result;
   if (existing) {
     // Update existing
-    result = await supabase
+    result = await db()
       .from('couriers')
       .update(profileData)
       .eq('user_id', userId)
@@ -78,7 +84,7 @@ export async function upsertCourierProfile(
       .single();
   } else {
     // Insert new
-    result = await supabase
+    result = await db()
       .from('couriers')
       .insert({
         ...profileData,
@@ -105,7 +111,7 @@ export async function setCourierStatus(
 ): Promise<boolean> {
   console.log('[couriers.api] setCourierStatus called with courierId:', courierId, 'status:', status);
   
-  const { error } = await supabase
+  const { error } = await db()
     .from('couriers')
     .update({ 
       status, 
@@ -132,7 +138,7 @@ export async function getAvailableOrders(city: string): Promise<any[]> {
   console.log('[couriers.api] getAvailableOrders called with city:', city);
   
   // Get orders without courier assignment that are ready for delivery
-  const { data, error } = await supabase
+  const { data, error } = await db()
     .from('orders')
     .select(`
       *,
@@ -159,7 +165,7 @@ export async function getOrdersForCourier(courierId: string): Promise<any[]> {
   console.log('[couriers.api] getOrdersForCourier called with courierId:', courierId);
   
   // Get order_ids assigned to this courier
-  const { data: courierOrders } = await supabase
+  const { data: courierOrders } = await db()
     .from('courier_orders')
     .select('order_id')
     .eq('courier_id', courierId);
@@ -170,7 +176,7 @@ export async function getOrdersForCourier(courierId: string): Promise<any[]> {
   
   const orderIds = courierOrders.map(co => co.order_id);
   
-  const { data, error } = await supabase
+  const { data, error } = await db()
     .from('orders')
     .select(`
       *,
@@ -194,7 +200,7 @@ export async function acceptOrder(orderId: string, courierId: string): Promise<b
   console.log('[couriers.api] acceptOrder called with orderId:', orderId, 'courierId:', courierId);
   
   // Check if order is available
-  const { data: order } = await supabase
+  const { data: order } = await db()
     .from('orders')
     .select('id, status, courier_id')
     .eq('id', orderId)
@@ -216,7 +222,7 @@ export async function acceptOrder(orderId: string, courierId: string): Promise<b
   }
   
   // Create courier_order record
-  const { error: insertError } = await supabase
+  const { error: insertError } = await db()
     .from('courier_orders')
     .insert({
       courier_id: courierId,
@@ -230,7 +236,7 @@ export async function acceptOrder(orderId: string, courierId: string): Promise<b
   }
   
   // Update order with courier
-  const { error: updateError } = await supabase
+  const { error: updateError } = await db()
     .from('orders')
     .update({ 
       courier_id: courierId,
@@ -261,7 +267,7 @@ export async function updateOrderStatus(
   console.log('[couriers.api] updateOrderStatus called with orderId:', orderId, 'status:', status);
   
   // Find courier_order
-  const { data: courierOrder } = await supabase
+  const { data: courierOrder } = await db()
     .from('courier_orders')
     .select('*')
     .eq('order_id', orderId)
@@ -285,7 +291,7 @@ export async function updateOrderStatus(
   }
   
   // Update courier_order
-  const { error } = await supabase
+  const { error } = await db()
     .from('courier_orders')
     .update(updateData)
     .eq('id', courierOrder.id);
@@ -303,7 +309,7 @@ export async function updateOrderStatus(
     orderStatus = 'cancelled';
   }
   
-  await supabase
+  await db()
     .from('orders')
     .update({ 
       status: orderStatus,
@@ -332,7 +338,7 @@ export async function getCourierOrders(
 ): Promise<CourierOrder[]> {
   console.log('[couriers.api] getCourierOrders called with courierId:', courierId, 'status:', status);
   
-  let query = supabase
+  let query = db()
     .from('courier_orders')
     .select(`
       *,
@@ -380,7 +386,7 @@ export async function getCourierEarnings(
     startDate = monthAgo.toISOString().split('T')[0];
   }
   
-  const { data, error } = await supabase
+  const { data, error } = await db()
     .from('courier_earnings')
     .select('*')
     .eq('courier_id', courierId)
@@ -409,7 +415,7 @@ export async function getCourierStats(courierId: string): Promise<CourierStatsSu
   const todayStr = now.toISOString().split('T')[0];
   
   // Today stats
-  const { data: todayStats } = await supabase
+  const { data: todayStats } = await db()
     .from('courier_stats')
     .select('orders_completed, total_earnings, total_distance_km')
     .eq('courier_id', courierId)
@@ -420,7 +426,7 @@ export async function getCourierStats(courierId: string): Promise<CourierStatsSu
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const weekAgoStr = weekAgo.toISOString().split('T')[0];
   
-  const { data: weekStats } = await supabase
+  const { data: weekStats } = await db()
     .from('courier_stats')
     .select('orders_completed, total_earnings, total_distance_km')
     .eq('courier_id', courierId)
@@ -430,7 +436,7 @@ export async function getCourierStats(courierId: string): Promise<CourierStatsSu
   const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   const monthAgoStr = monthAgo.toISOString().split('T')[0];
   
-  const { data: monthStats } = await supabase
+  const { data: monthStats } = await db()
     .from('courier_stats')
     .select('orders_completed, total_earnings, total_distance_km')
     .eq('courier_id', courierId)
@@ -467,7 +473,7 @@ export async function getAllCouriers(filters?: {
 }): Promise<Courier[]> {
   console.log('[couriers.api] getAllCouriers called with filters:', filters);
   
-  let query = supabase
+  let query = db()
     .from('couriers')
     .select('*')
     .order('created_at', { ascending: false });

@@ -37,14 +37,15 @@ export default function AvailableOrdersPage() {
   const [courierId, setCourierId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Загрузка заказов
   const fetchOrders = useCallback(async () => {
-    if (!courierId) return;
-    
     try {
       setError(null);
-      const data = await getAvailableOrders("Москва"); // TODO: получить город из профиля курьера
-      setOrders(data);
+      const response = await fetch("/api/courier/orders?type=available");
+      if (!response.ok) {
+        throw new Error("Failed to load orders");
+      }
+      const data = await response.json();
+      setOrders(data.orders || []);
     } catch (err) {
       console.error("Ошибка загрузки заказов:", err);
       setError("Не удалось загрузить заказы");
@@ -52,7 +53,7 @@ export default function AvailableOrdersPage() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [courierId]);
+  }, []);
 
   // Получение ID курьера при загрузке
   useEffect(() => {

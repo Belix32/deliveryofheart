@@ -5,7 +5,8 @@ export interface Courier {
   phone: string;
   email?: string;
   avatar_url?: string;
-  status: 'online' | 'offline' | 'busy';
+  status: "online" | "offline" | "busy";
+  is_online?: boolean;
   current_city: string;
   vehicle_type: 'bike' | 'car' | 'walk' | 'scooter';
   rating: number;

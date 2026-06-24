@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Trash2, Minus, Plus, MapPin, ArrowLeft, CreditCard, Printer, ShoppingBag, Leaf } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
-import { supabase, createOrder, Address, fetchAddresses } from "@/lib/supabase";
+import { Address, fetchAddresses } from "@/lib/supabase";
 
 const CartPage: React.FC = () => {
   const { items, updateQuantity, removeFromCart, total, deliveryPrice, clearCart, restaurant } = useCart();
@@ -17,6 +17,8 @@ const CartPage: React.FC = () => {
   const [isOrdering, setIsOrdering] = useState(false);
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([]);
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
+  const [couponCode, setCouponCode] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "card_on_delivery">("cash");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -39,17 +41,16 @@ const CartPage: React.FC = () => {
   };
 
   const handleOrder = async () => {
-    // Require authentication before ordering
     if (!user) {
-      window.location.href = '/auth';
+      window.location.href = "/auth?redirect=/cart";
       return;
     }
-    
+
     if (!address) {
       setError("Пожалуйста, укажите адрес доставки");
       return;
     }
-    
+
     if (!restaurant) {
       setError("Выберите ресторан");
       return;
@@ -59,83 +60,36 @@ const CartPage: React.FC = () => {
     setIsOrdering(true);
 
     try {
-      // Use user.id from AuthContext
-      
-      // Создаём адрес если его нет в сохранённых
-      let addressId = null;
-      
-      // Пробуем найти существующий адрес (частичное совпадение)
-      const existingAddr = savedAddresses.find(a => 
-        a.address_text?.includes(address) || address?.includes(a.address_text)
-      );
-      if (existingAddr) {
-        addressId = existingAddr.id;
-      } else {
-        // Создаём новый адрес
-        const { data: newAddr } = await supabase
-          .from('addresses')
-          .insert({
-            user_id: user.id,
-            address_text: address,
-            apartment: apartment || undefined,
-            comment: comment || undefined,
-            is_default: savedAddresses.length === 0,
-          })
-          .select()
-          .single();
-        
-        if (newAddr) {
-          addressId = newAddr.id;
-        }
-      }
-
-      // Создаём заказ
-      // Генерируем уникальный номер заказа
-      const orderNumber = Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase();
-      
-      const orderData = {
-        order_number: orderNumber,
-        user_id: user.id,
-        restaurant_id: restaurant.id,
-        total_amount: total,
-        delivery_price: deliveryPrice,
-        final_amount: total + deliveryPrice,
-        status: 'pending',
-      };
-      
-      console.log('Creating order with data:', orderData);
-      console.log('user.id:', user.id);
-      console.log('restaurant.id:', restaurant.id);
-      
-      const order = await createOrder(orderData);
-      
-      console.log('Order result:', order);
-
-      if (order) {
-        setOrderNumber(order.order_number);
-        
-        // Добавляем позиции заказа
-        if (items.length > 0) {
-          const orderItems = items.map(item => ({
-            order_id: order.id,
+      const response = await fetch("/api/orders/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          restaurant_id: restaurant.id,
+          items: items.map((item) => ({
             menu_item_id: item.dish.id,
             quantity: item.quantity,
             price: item.dish.price,
-            total_price: item.dish.price * item.quantity,
-          }));
-          
-          console.log('Adding order items:', orderItems);
-          await supabase.from('order_items').insert(orderItems);
-        }
-        
-        clearCart();
-      } else {
-        console.error('Order creation failed - order is null');
-        setError("Ошибка при создании заказа. Попробуйте ещё раз.");
+          })),
+          address_text: address,
+          apartment,
+          comment,
+          coupon_code: couponCode || undefined,
+          payment_method: paymentMethod,
+          delivery_price: deliveryPrice,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || "Ошибка при создании заказа");
         setIsOrdering(false);
+        return;
       }
-    } catch (err) {
-      console.error('Order error:', err);
+
+      setOrderNumber(data.order.order_number);
+      clearCart();
+    } catch {
       setError("Произошла ошибка. Попробуйте ещё раз.");
       setIsOrdering(false);
     }
@@ -157,11 +111,17 @@ const CartPage: React.FC = () => {
           <p className="text-4xl font-display font-bold text-primary dark:text-primary-dark">#{orderNumber}</p>
         </div>
         <p className="text-sm text-[#2D2A26]/60 dark:text-[#E8E6E3]/60 mb-8 text-center">
-          Мы отправим уведомление, когда заказ будет готов
+          Статус заказа можно отслеживать в разделе «Профиль»
         </p>
         <Link
+          href={`/order?number=${orderNumber}`}
+          className="px-8 py-4 mb-3 bg-primary dark:bg-primary-dark text-white font-bold rounded-2xl hover:opacity-90 transition-all duration-300"
+        >
+          Отследить заказ
+        </Link>
+        <Link
           href="/"
-          className="px-8 py-4 bg-primary dark:bg-primary-dark text-white font-bold rounded-2xl hover:opacity-90 hover:shadow-lg hover:shadow-primary/25 transition-all duration-300"
+          className="px-8 py-4 bg-[#F5F3F0] dark:bg-[#2D2A26] text-[#2D2A26] dark:text-[#E8E6E3] font-bold rounded-2xl hover:opacity-90 transition-all duration-300"
         >
           Вернуться на главную
         </Link>
@@ -326,6 +286,37 @@ const CartPage: React.FC = () => {
             className="flex-1 p-4 rounded-xl bg-white dark:bg-[#2D2A26] border-2 border-[#F5F3F0] dark:border-[#3D3A36] focus:border-primary dark:focus:border-primary-dark outline-none transition-colors"
           />
         </div>
+      </div>
+
+      {/* Coupon & payment */}
+      <div className="mb-4">
+        <input
+          type="text"
+          value={couponCode}
+          onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+          placeholder="Промокод"
+          className="w-full p-4 rounded-xl bg-white dark:bg-[#2D2A26] border-2 border-[#F5F3F0] dark:border-[#3D3A36] focus:border-primary outline-none uppercase"
+        />
+      </div>
+      <div className="mb-6 flex gap-3">
+        <button
+          type="button"
+          onClick={() => setPaymentMethod("cash")}
+          className={`flex-1 p-3 rounded-xl border-2 text-sm font-medium ${
+            paymentMethod === "cash" ? "border-primary bg-primary/5" : "border-[#F5F3F0] dark:border-[#3D3A36]"
+          }`}
+        >
+          Наличные
+        </button>
+        <button
+          type="button"
+          onClick={() => setPaymentMethod("card_on_delivery")}
+          className={`flex-1 p-3 rounded-xl border-2 text-sm font-medium ${
+            paymentMethod === "card_on_delivery" ? "border-primary bg-primary/5" : "border-[#F5F3F0] dark:border-[#3D3A36]"
+          }`}
+        >
+          Картой курьеру
+        </button>
       </div>
 
       {/* Error */}

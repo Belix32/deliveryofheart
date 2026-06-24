@@ -25,7 +25,7 @@ import OrderTracker from "@/components/OrderTracker";
 const ProfilePage: React.FC = () => {
   const router = useRouter();
   const { isDark, toggleTheme } = useTheme();
-  const { user, signOut } = useAuth();
+  const { user, authUser, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState<"orders" | "favorites" | "addresses" | "settings">("orders");
   const [orders, setOrders] = useState<Order[]>([]);
   const [addresses, setAddresses] = useState<Address[]>([]);
@@ -47,7 +47,7 @@ const ProfilePage: React.FC = () => {
     if (user) {
       setUserId(user.id);
       setUserName(user.full_name || "Без имени");
-      setUserPhone(user.phone || "");
+      setUserPhone(user.phone || authUser?.email || "");
       
       // Загружаем заказы
       const userOrders = await fetchUserOrders(user.id);
@@ -232,7 +232,7 @@ const ProfilePage: React.FC = () => {
                     <div>
                       <p className="font-semibold">Заказ #{order.order_number}</p>
                       <p className="text-sm text-[#2D2A26]/60 dark:text-[#E8E6E3]/60">
-                        {formatDate(order.created_at)}
+                        {formatDate(order.created_at ?? "")}
                       </p>
                     </div>
                     <span className={`px-3 py-1 rounded-full text-sm ${getStatusColor(order.status)}`}>
@@ -240,7 +240,7 @@ const ProfilePage: React.FC = () => {
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <p className="text-lg font-semibold">{formatPrice(order.final_amount)}</p>
+                    <p className="text-lg font-semibold">{formatPrice(order.final_amount ?? 0)}</p>
                     <Link
                       href={`/order/${order.id}`}
                       className="text-primary dark:text-primary-dark text-sm font-medium"

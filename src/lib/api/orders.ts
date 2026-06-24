@@ -1,4 +1,8 @@
-import { supabase } from '@/lib/supabase';
+import { createAdminClient } from "@/lib/supabase/admin";
+
+function db() {
+  return createAdminClient();
+}
 
 /**
  * Интерфейс для истории статусов заказа
@@ -82,7 +86,7 @@ export async function updateOrderStatus(
   }
 
   // Обновляем заказ
-  const { error: updateError } = await supabase
+  const { error: updateError } = await db()
     .from('orders')
     .update({
       status,
@@ -97,7 +101,7 @@ export async function updateOrderStatus(
   }
 
   // Записываем историю статусов
-  const { error: historyError } = await supabase
+  const { error: historyError } = await db()
     .from('order_status_history')
     .insert({
       order_id: orderId,
@@ -127,7 +131,7 @@ export async function getRestaurantOrders(
 ): Promise<RestaurantOrder[]> {
   console.log('[orders.api] getRestaurantOrders called:', { restaurantId, status });
 
-  let query = supabase
+  let query = db()
     .from('orders')
     .select(`
       *,
@@ -160,7 +164,7 @@ export async function getRestaurantOrders(
 export async function getOrderHistory(orderId: string): Promise<StatusHistory[]> {
   console.log('[orders.api] getOrderHistory called:', orderId);
 
-  const { data, error } = await supabase
+  const { data, error } = await db()
     .from('order_status_history')
     .select('*')
     .eq('order_id', orderId)
@@ -186,7 +190,7 @@ export async function checkRestaurantOrderAccess(
 ): Promise<boolean> {
   console.log('[orders.api] checkRestaurantOrderAccess called:', { userId, restaurantId });
 
-  const { data: userRoles, error } = await supabase
+  const { data: userRoles, error } = await db()
     .from('user_roles')
     .select('*, roles(name)')
     .eq('user_id', userId)
@@ -215,7 +219,7 @@ export async function checkRestaurantOrderAccess(
 export async function checkIsAdmin(userId: string): Promise<boolean> {
   console.log('[orders.api] checkIsAdmin called:', userId);
 
-  const { data: userRoles, error } = await supabase
+  const { data: userRoles, error } = await db()
     .from('user_roles')
     .select('*, roles(name)')
     .eq('user_id', userId)
@@ -238,7 +242,7 @@ export async function checkIsAdmin(userId: string): Promise<boolean> {
 export async function getUserRestaurantId(userId: string): Promise<string | null> {
   console.log('[orders.api] getUserRestaurantId called:', userId);
 
-  const { data: userRoles, error } = await supabase
+  const { data: userRoles, error } = await db()
     .from('user_roles')
     .select('restaurant_id')
     .eq('user_id', userId)

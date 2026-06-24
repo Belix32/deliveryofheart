@@ -47,6 +47,16 @@ export default function UsersPage() {
   const [selectedRole, setSelectedRole] = useState<string>("");
   const [selectedRestaurant, setSelectedRestaurant] = useState<string>("");
   const [isAssigning, setIsAssigning] = useState(false);
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 15;
+
+  const filteredUsers = users.filter(
+    (u) =>
+      u.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      u.id.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+  const paginatedUsers = filteredUsers.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const totalPages = Math.ceil(filteredUsers.length / PAGE_SIZE);
 
   const fetchData = useCallback(async () => {
     try {
@@ -62,11 +72,7 @@ const { data: { session } } = await supabase.auth.getSession();
       }
       
       // Real API call
-      const response = await fetch('/api/admin/users', {
-        headers: {
-          'x-user-id': session.user.id,
-        },
-      });
+      const response = await fetch('/api/admin/users');
 
       if (!response.ok) {
         const data = await response.json();
@@ -100,7 +106,6 @@ const { data: { session } } = await supabase.auth.getSession();
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': session?.user?.id || '',
         },
         body: JSON.stringify({
           target_user_id: selectedUser.id,
@@ -133,9 +138,6 @@ const { data: { session } } = await supabase.auth.getSession();
 
       const response = await fetch(`/api/admin/users?user_role_id=${userRoleId}`, {
         method: 'DELETE',
-        headers: {
-          'x-user-id': session?.user?.id || '',
-        },
       });
 
       if (!response.ok) {
@@ -163,10 +165,6 @@ const { data: { session } } = await supabase.auth.getSession();
         return <User className="w-4 h-4" />;
     }
   };
-
-  const filteredUsers = users.filter(user =>
-    user.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   if (isLoading) {
     return (
@@ -201,14 +199,17 @@ const { data: { session } } = await supabase.auth.getSession();
           type="text"
           placeholder="Поиск по email..."
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(e) => {
+            setSearchQuery(e.target.value);
+            setPage(0);
+          }}
           className="w-full pl-12 pr-4 py-3 rounded-xl bg-[#1A1918] border border-[#2D2A26] text-white placeholder-neutral-500 focus:outline-none focus:border-primary"
         />
       </div>
 
       {/* Users List */}
       <div className="space-y-4">
-        {filteredUsers.map((user) => (
+        {paginatedUsers.map((user) => (
           <div
             key={user.id}
             className="p-4 rounded-xl bg-[#1A1918] border border-[#2D2A26]"
@@ -257,6 +258,28 @@ const { data: { session } } = await supabase.auth.getSession();
           </div>
         ))}
       </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-4 pt-4">
+          <button
+            disabled={page === 0}
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            className="px-4 py-2 rounded-lg bg-[#2D2A26] text-white disabled:opacity-40"
+          >
+            Назад
+          </button>
+          <span className="text-neutral-400 text-sm">
+            {page + 1} / {totalPages}
+          </span>
+          <button
+            disabled={page >= totalPages - 1}
+            onClick={() => setPage((p) => p + 1)}
+            className="px-4 py-2 rounded-lg bg-[#2D2A26] text-white disabled:opacity-40"
+          >
+            Далее
+          </button>
+        </div>
+      )}
 
       {/* Add Role Modal */}
       {showAddModal && (

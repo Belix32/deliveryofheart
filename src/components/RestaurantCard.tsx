@@ -4,7 +4,7 @@ import React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Star, Clock } from "lucide-react";
-import { Restaurant } from "@/lib/supabase";
+import { Restaurant } from "@/lib/types";
 import { getRestaurantEmoji, getRestaurantPlaceholderStyle } from "@/lib/images";
 
 interface RestaurantCardProps {
@@ -21,7 +21,7 @@ const RestaurantCard: React.FC<RestaurantCardProps> = ({ restaurant }) => {
         <div className="relative aspect-[4/3] overflow-hidden">
           {hasImage ? (
             <Image
-              src={restaurant.cover_url}
+              src={restaurant.cover_url!}
               alt={restaurant.name}
               fill
               sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"

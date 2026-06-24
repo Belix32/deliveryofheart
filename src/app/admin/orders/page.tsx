@@ -37,6 +37,9 @@ const OrdersPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [cityFilter, setCityFilter] = useState<string>("all");
   const [restaurantFilter, setRestaurantFilter] = useState<string>("all");
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 20;
+  const [totalCount, setTotalCount] = useState(0);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
 
   // Load cities
@@ -62,22 +65,27 @@ const OrdersPage: React.FC = () => {
     
     let query = supabase
       .from("orders")
-      .select(`
+      .select(
+        `
         *,
         restaurants (name, address),
         users (full_name, phone),
         couriers (name, phone)
-      `)
-      .order("created_at", { ascending: false });
+      `,
+        { count: "exact" }
+      )
+      .order("created_at", { ascending: false })
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
     if (cityFilter !== "all") {
       query = query.eq("delivery_city", cityFilter);
     }
 
-    const { data, error } = await query;
+    const { data, error, count } = await query;
 
     if (!error && data) {
       setOrders(data);
+      setTotalCount(count || 0);
       setLastUpdate(new Date());
     }
     setLoading(false);
@@ -86,7 +94,7 @@ const OrdersPage: React.FC = () => {
 
   useEffect(() => {
     loadOrders();
-  }, [cityFilter]);
+  }, [cityFilter, page]);
 
   // Real-time refresh every 10 seconds
   useEffect(() => {
@@ -438,6 +446,28 @@ const OrdersPage: React.FC = () => {
             <p className="text-[#2D2A26]/60 dark:text-[#E8E6E3]/60">
               Заказов не найдено
             </p>
+          </div>
+        )}
+
+        {totalCount > PAGE_SIZE && (
+          <div className="flex items-center justify-between mt-6">
+            <button
+              disabled={page === 0}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              className="px-4 py-2 rounded-xl bg-[#F5F3F0] dark:bg-[#2D2A26] disabled:opacity-50"
+            >
+              Назад
+            </button>
+            <span className="text-sm text-[#2D2A26]/60">
+              Страница {page + 1} из {Math.ceil(totalCount / PAGE_SIZE)}
+            </span>
+            <button
+              disabled={(page + 1) * PAGE_SIZE >= totalCount}
+              onClick={() => setPage((p) => p + 1)}
+              className="px-4 py-2 rounded-xl bg-[#F5F3F0] dark:bg-[#2D2A26] disabled:opacity-50"
+            >
+              Далее
+            </button>
           </div>
         )}
       </div>

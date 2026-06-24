@@ -110,7 +110,7 @@ const RestaurantsAdminPage: React.FC = () => {
                 </p>
               </div>
               <button
-                onClick={() => toggleActive(restaurant.id, restaurant.is_active)}
+                onClick={() => toggleActive(restaurant.id, restaurant.is_active ?? false)}
                 className="text-primary"
               >
                 {restaurant.is_active ? (
@@ -142,7 +142,7 @@ const RestaurantsAdminPage: React.FC = () => {
             </div>
 
             <div className="flex justify-between items-center mt-4 pt-3 border-t border-[#2D2A26]/10">
-              <span className="font-medium">{formatPrice(restaurant.delivery_price)} доставка</span>
+              <span className="font-medium">{formatPrice(restaurant.delivery_price ?? 0)} доставка</span>
               <div className="flex gap-2">
                 <button
                   onClick={() => deleteRestaurant(restaurant.id)}

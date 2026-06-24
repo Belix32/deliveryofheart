@@ -14,7 +14,7 @@ interface DishCardProps {
   restaurant?: {
     id: string;
     name: string;
-    delivery_price: number;
+    delivery_price?: number | null;
   };
 }
 
@@ -35,13 +35,15 @@ const DishCard: React.FC<DishCardProps> = ({ dish, restaurant }) => {
     setIsAdding(true);
     addToCart({
       id: dish.id,
-      restaurantId: restaurant?.id || '',
       name: dish.name,
-      description: dish.description || '',
-      price: Number(dish.price),
-      image: dish.image_url || '',
-      category: '',
-    }, restaurant as any);
+      description: dish.description || "",
+      price: dish.price,
+      image: dish.image_url || undefined,
+    }, {
+      id: restaurant?.id || "",
+      name: restaurant?.name || "",
+      delivery_price: restaurant?.delivery_price ?? 0,
+    });
     setTimeout(() => setIsAdding(false), 400);
   };
 
@@ -52,7 +54,7 @@ const DishCard: React.FC<DishCardProps> = ({ dish, restaurant }) => {
       <div className="relative aspect-[3/2] overflow-hidden">
         {hasImage ? (
           <Image
-            src={dish.image_url}
+            src={dish.image_url!}
             alt={dish.name}
             fill
             sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"

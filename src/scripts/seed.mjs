@@ -27,6 +27,8 @@ async function fetchAPI(endpoint, options = {}) {
   return text ? JSON.parse(text) : null;
 }
 
+const CITY = process.env.NEXT_PUBLIC_CITY || 'Сураж';
+
 async function addItem(categoryId, name, desc, price, weight) {
   await fetchAPI('menu_items', {
     method: 'POST',
@@ -45,7 +47,7 @@ async function seedDatabase() {
     // 1. Город
     const cities = await fetchAPI('cities?select=id');
     if (cities.length === 0) {
-      await fetchAPI('cities', { method: 'POST', body: JSON.stringify([{ name: 'Сураж', region: 'Брянская область', is_active: true }]) });
+      await fetchAPI('cities', { method: 'POST', body: JSON.stringify([{ name: CITY, region: 'Брянская область', is_active: true }]) });
       console.log('  ✅ Города добавлены');
     } else {
       console.log('  → Города уже есть');
@@ -57,9 +59,9 @@ async function seedDatabase() {
       await fetchAPI('restaurants', {
         method: 'POST',
         body: JSON.stringify([
-          { name: 'Пельменная №1', slug: 'pelmennaya-1', description: 'Уютное заведение с домашней кухней', address: 'ул. Ленина 25', phone: '+7(48336)2-12-34', rating: 4.8, delivery_time_min: 25, delivery_time_max: 35, delivery_price: 50, min_order: 300, is_active: true, city: 'Сураж' },
-          { name: 'Sushi Master', slug: 'sushi-master', description: 'Свежие роллы и суши', address: 'ул. Пушкина 10', phone: '+7(48336)2-56-78', rating: 4.9, delivery_time_min: 30, delivery_time_max: 40, delivery_price: 70, min_order: 500, is_active: true, city: 'Сураж' },
-          { name: 'Pizza Napoli', slug: 'pizza-napoli', description: 'Итальянская пицца из настоящей печи', address: 'ул. Советская 15', phone: '+7(48336)2-90-12', rating: 4.7, delivery_time_min: 20, delivery_time_max: 30, delivery_price: 40, min_order: 400, is_active: true, city: 'Сураж' }
+          { name: 'Пельменная №1', slug: 'pelmennaya-1', description: 'Уютное заведение с домашней кухней', address: 'ул. Ленина 25', phone: '+7(48336)2-12-34', rating: 4.8, delivery_time_min: 25, delivery_time_max: 35, delivery_price: 50, min_order: 300, is_active: true, city: CITY },
+          { name: 'Sushi Master', slug: 'sushi-master', description: 'Свежие роллы и суши', address: 'ул. Пушкина 10', phone: '+7(48336)2-56-78', rating: 4.9, delivery_time_min: 30, delivery_time_max: 40, delivery_price: 70, min_order: 500, is_active: true, city: CITY },
+          { name: 'Pizza Napoli', slug: 'pizza-napoli', description: 'Итальянская пицца из настоящей печи', address: 'ул. Советская 15', phone: '+7(48336)2-90-12', rating: 4.7, delivery_time_min: 20, delivery_time_max: 30, delivery_price: 40, min_order: 400, is_active: true, city: CITY }
         ])
       });
       console.log('  ✅ Рестораны добавлены');
