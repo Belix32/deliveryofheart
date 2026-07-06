@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { getCourierEarnings, getCourierProfileById } from "@/lib/api/couriers";
-import { useAuth } from "@/context/AuthContext";
+import { fetchCourierEarnings } from "@/lib/courier-client";
 import BottomNav from "@/components/courier/BottomNav";
 import { ArrowLeft, TrendingUp, Calendar, Wallet, Clock, ChevronRight } from "lucide-react";
 
@@ -18,54 +17,27 @@ interface DailyEarnings {
 type PeriodType = "daily" | "weekly" | "monthly";
 
 export default function EarningsPage() {
-  const { user } = useAuth();
   const [period, setPeriod] = useState<PeriodType>("daily");
   const [earnings, setEarnings] = useState<DailyEarnings[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [courierId, setCourierId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Получение ID курьера
-  useEffect(() => {
-    const initCourier = async () => {
-      if (!user?.id) return;
-      
-      try {
-        const profile = await getCourierProfileById(user.id);
-        if (profile) {
-          setCourierId(profile.id);
-        }
-      } catch (err) {
-        console.error("Ошибка получения профиля курьера:", err);
-        setError("Не удалось получить данные курьера");
-        setIsLoading(false);
-      }
-    };
-    
-    initCourier();
-  }, [user?.id]);
-
-  // Загрузка заработка
   const fetchEarnings = useCallback(async () => {
-    if (!courierId) return;
-    
     try {
       setError(null);
-      const data = await getCourierEarnings(courierId, period);
-      setEarnings(data);
+      const data = await fetchCourierEarnings(period);
+      setEarnings(data as DailyEarnings[]);
     } catch (err) {
       console.error("Ошибка загрузки заработка:", err);
       setError("Не удалось загрузить данные о заработке");
     } finally {
       setIsLoading(false);
     }
-  }, [courierId, period]);
+  }, [period]);
 
   useEffect(() => {
-    if (courierId) {
-      fetchEarnings();
-    }
-  }, [courierId, fetchEarnings]);
+    fetchEarnings();
+  }, [fetchEarnings]);
 
   // Расчёт итогов
   const calculateTotal = () => {

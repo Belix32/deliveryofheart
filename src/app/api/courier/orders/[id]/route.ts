@@ -17,7 +17,7 @@ export async function POST(
     const { action } = body;
 
     if (action === "accept") {
-      if (!profile.is_online) {
+      if (profile.status !== "online") {
         return NextResponse.json({ error: "Выйдите на линию, чтобы принять заказ" }, { status: 400 });
       }
       const success = await acceptOrder(orderId, profile.id);

@@ -55,7 +55,8 @@ export async function PATCH(
       );
     }
 
-    const success = await updateOrderStatus(orderId, status, note, userId);
+    const role = isAdmin ? "admin" : hasRestaurantAccess ? "restaurant" : "customer";
+    const success = await updateOrderStatus(orderId, status, note, userId, role);
     if (!success) {
       return NextResponse.json({ error: "Ошибка обновления статуса" }, { status: 500 });
     }

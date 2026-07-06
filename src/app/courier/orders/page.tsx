@@ -2,66 +2,36 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { getCourierOrders, updateOrderStatus, getCourierProfileById } from "@/lib/api/couriers";
-import { useAuth } from "@/context/AuthContext";
+import { fetchCourierOrders, updateCourierOrderStatus } from "@/lib/courier-client";
 import OrderCard from "@/components/courier/OrderCard";
 import StatusBadge from "@/components/courier/StatusBadge";
 import BottomNav from "@/components/courier/BottomNav";
-import { ArrowLeft, Package, CheckCircle2, Clock, Truck } from "lucide-react";
+import { ArrowLeft, Package, CheckCircle2, Clock } from "lucide-react";
 import type { CourierOrder } from "@/lib/types/courier";
 
 type OrderStatus = "assigned" | "accepted" | "picked_up" | "in_delivery" | "delivered" | "cancelled" | "failed" | "pending";
-
 type TabType = "active" | "completed";
 
 export default function MyOrdersPage() {
-  const router = useRouter();
-  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>("active");
   const [activeOrders, setActiveOrders] = useState<CourierOrder[]>([]);
   const [completedOrders, setCompletedOrders] = useState<CourierOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [processingOrderId, setProcessingOrderId] = useState<string | null>(null);
-  const [courierId, setCourierId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Получение ID курьера
-  useEffect(() => {
-    const initCourier = async () => {
-      if (!user?.id) return;
-      
-      try {
-        const profile = await getCourierProfileById(user.id);
-        if (profile) {
-          setCourierId(profile.id);
-        }
-      } catch (err) {
-        console.error("Ошибка получения профиля курьера:", err);
-        setError("Не удалось получить данные курьера");
-        setIsLoading(false);
-      }
-    };
-    
-    initCourier();
-  }, [user?.id]);
-
-  // Загрузка заказов
   const fetchOrders = useCallback(async () => {
-    if (!courierId) return;
-    
     try {
       setError(null);
-      const data = await getCourierOrders(courierId);
-      
-      // Разделяем на активные и завершённые
-      const active = data.filter((o) => 
+      const data = await fetchCourierOrders();
+
+      const active = data.filter((o) =>
         ["assigned", "accepted", "picked_up", "in_delivery"].includes(o.status)
       );
-      const completed = data.filter((o) => 
+      const completed = data.filter((o) =>
         ["delivered", "cancelled", "failed"].includes(o.status)
       );
-      
+
       setActiveOrders(active);
       setCompletedOrders(completed);
     } catch (err) {
@@ -70,22 +40,19 @@ export default function MyOrdersPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [courierId]);
+  }, []);
 
   useEffect(() => {
-    if (courierId) {
-      fetchOrders();
-    }
-  }, [courierId, fetchOrders]);
+    fetchOrders();
+  }, [fetchOrders]);
 
-  // Обработка действий с заказом
   const handleAction = async (order: CourierOrder) => {
-    if (!order.order || !courierId) return;
-    
+    if (!order.order) return;
+
     setProcessingOrderId(order.id);
     try {
       let newStatus: "accepted" | "picked_up" | "delivered" | null = null;
-      
+
       if (order.status === "assigned") {
         newStatus = "accepted";
       } else if (order.status === "accepted") {
@@ -93,29 +60,22 @@ export default function MyOrdersPage() {
       } else if (order.status === "picked_up" || order.status === "in_delivery") {
         newStatus = "delivered";
       }
-      
+
       if (newStatus) {
-        const success = await updateOrderStatus(order.order_id, courierId, newStatus);
-        
-        if (success) {
-          // Обновляем локальное состояние
-          if (newStatus === "delivered") {
-            // Переносим в завершённые
-            setActiveOrders((prev) => prev.filter((o) => o.id !== order.id));
-            setCompletedOrders((prev) => [
-              { ...order, status: "delivered" as OrderStatus },
-              ...prev,
-            ]);
-          } else {
-            // Обновляем статус в активных
-            setActiveOrders((prev) =>
-              prev.map((o) =>
-                o.id === order.id ? { ...o, status: newStatus as OrderStatus } : o
-              )
-            );
-          }
+        await updateCourierOrderStatus(order.order_id, newStatus);
+
+        if (newStatus === "delivered") {
+          setActiveOrders((prev) => prev.filter((o) => o.id !== order.id));
+          setCompletedOrders((prev) => [
+            { ...order, status: "delivered" as OrderStatus },
+            ...prev,
+          ]);
         } else {
-          setError("Не удалось обновить статус заказа");
+          setActiveOrders((prev) =>
+            prev.map((o) =>
+              o.id === order.id ? { ...o, status: newStatus as OrderStatus } : o
+            )
+          );
         }
       }
     } catch (err) {
@@ -128,11 +88,16 @@ export default function MyOrdersPage() {
 
   const getActionLabel = (status: OrderStatus) => {
     switch (status) {
-      case "assigned": return "Забрать";
-      case "accepted": return "Взять";
-      case "picked_up": return "Еду";
-      case "in_delivery": return "Доставлен";
-      default: return "Детали";
+      case "assigned":
+        return "Забрать";
+      case "accepted":
+        return "Взять";
+      case "picked_up":
+        return "Еду";
+      case "in_delivery":
+        return "Доставлен";
+      default:
+        return "Детали";
     }
   };
 
@@ -152,7 +117,6 @@ export default function MyOrdersPage() {
 
   return (
     <div className="min-h-screen bg-[#0A0A09]">
-      {/* Header */}
       <header className="sticky top-0 z-40 bg-[#0A0A09]/95 backdrop-blur-md border-b border-[#2D2A26]">
         <div className="flex items-center justify-between px-4 py-3">
           <Link
@@ -162,21 +126,19 @@ export default function MyOrdersPage() {
             <ArrowLeft className="w-5 h-5" />
             <span>Назад</span>
           </Link>
-          
+
           <h1 className="text-lg font-semibold text-white">Мои заказы</h1>
-          
+
           <div className="w-10" />
         </div>
       </header>
 
-      {/* Error message */}
       {error && (
         <div className="mx-4 mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
           <p className="text-red-400 text-sm">{error}</p>
         </div>
       )}
 
-      {/* Tabs */}
       <div className="px-4 py-3 border-b border-[#2D2A26]">
         <div className="flex gap-2">
           <button
@@ -204,7 +166,6 @@ export default function MyOrdersPage() {
         </div>
       </div>
 
-      {/* Summary for completed */}
       {activeTab === "completed" && completedOrders.length > 0 && (
         <div className="px-4 py-3 border-b border-[#2D2A26]">
           <div className="flex items-center justify-between">
@@ -220,13 +181,11 @@ export default function MyOrdersPage() {
         </div>
       )}
 
-      {/* Content */}
       <main className="p-4 pb-20">
         {currentOrders.length > 0 ? (
           <div className="space-y-4">
             {currentOrders.map((order) => (
               <div key={order.id} className="space-y-3">
-                {/* Order header */}
                 <div className="flex items-center justify-between">
                   <StatusBadge status={order.status} />
                   <span className="text-xs text-neutral-500">
@@ -236,8 +195,7 @@ export default function MyOrdersPage() {
                     })}
                   </span>
                 </div>
-                
-                {/* Order card */}
+
                 {order.order && (
                   <OrderCard
                     order={{
@@ -251,14 +209,11 @@ export default function MyOrdersPage() {
                     actionLabel={getActionLabel(order.status)}
                   />
                 )}
-                
-                {/* Earnings for completed */}
+
                 {activeTab === "completed" && (
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-neutral-500">Заказ выполнен</span>
-                    <span className="text-emerald-400 font-medium">
-                      +{order.earnings} ₽
-                    </span>
+                    <span className="text-emerald-400 font-medium">+{order.earnings} ₽</span>
                   </div>
                 )}
               </div>
@@ -289,7 +244,6 @@ export default function MyOrdersPage() {
         )}
       </main>
 
-      {/* Bottom Navigation */}
       <BottomNav />
     </div>
   );

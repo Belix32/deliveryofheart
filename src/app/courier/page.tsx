@@ -4,16 +4,16 @@ import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  getCourierProfileById,
-  setCourierStatus,
-  getCourierStats,
-} from "@/lib/api/couriers";
+  fetchCourierProfile,
+  fetchCourierStats,
+  setCourierOnlineStatus,
+} from "@/lib/courier-client";
 import { useAuth } from "@/context/AuthContext";
 import type { Courier, CourierStatsSummary } from "@/lib/types/courier";
 import StatusToggle from "@/components/courier/StatusToggle";
 import QuickStats from "@/components/courier/QuickStats";
 import BottomNav from "@/components/courier/BottomNav";
-import { PackagePlus, ClipboardList, RefreshCw, Zap } from "lucide-react";
+import { PackagePlus, ClipboardList, Zap } from "lucide-react";
 
 const defaultStats: CourierStatsSummary = {
   today: {
@@ -42,25 +42,21 @@ export default function CourierPage() {
   const [isStatusLoading, setIsStatusLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Загрузка данных курьера
   const fetchData = useCallback(async () => {
     if (!user?.id) return;
-    
+
     try {
       setError(null);
-      // Получаем профиль по user_id
-      const profile = await getCourierProfileById(user.id);
-      
+      const profile = await fetchCourierProfile();
+
       if (!profile) {
         setError("Профиль курьера не найден");
         setIsLoading(false);
         return;
       }
-      
+
       setCourier(profile);
-      
-      // Получаем статистику
-      const statsData = await getCourierStats(profile.id);
+      const statsData = await fetchCourierStats();
       setStats(statsData);
     } catch (err) {
       console.error("Ошибка загрузки данных курьера:", err);
@@ -70,30 +66,24 @@ export default function CourierPage() {
     }
   }, [user?.id]);
 
-  // Загрузка при монтировании
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // Polling для обновления данных каждые 30 секунд
   useEffect(() => {
     if (!user?.id) return;
-    
+
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, [user?.id, fetchData]);
 
   const handleStatusChange = async (newStatus: "online" | "offline") => {
     if (!courier) return;
-    
+
     setIsStatusLoading(true);
     try {
-      const success = await setCourierStatus(courier.id, newStatus);
-      if (success) {
-        setCourier({ ...courier, status: newStatus });
-      } else {
-        setError("Не удалось изменить статус");
-      }
+      await setCourierOnlineStatus(newStatus);
+      setCourier({ ...courier, status: newStatus });
     } catch (err) {
       console.error("Ошибка изменения статуса:", err);
       setError("Ошибка при изменении статуса");
@@ -150,17 +140,13 @@ export default function CourierPage() {
 
   return (
     <div className="p-4 space-y-6">
-      {/* Greeting */}
       <div className="space-y-1">
         <h1 className="text-3xl font-bold text-white">
           {getGreeting()}, {displayCourier.name}!
         </h1>
-        <p className="text-neutral-400">
-          Работайте с нами и зарабатывайте
-        </p>
+        <p className="text-neutral-400">Работайте с нами и зарабатывайте</p>
       </div>
 
-      {/* Status Toggle */}
       <section>
         <StatusToggle
           currentStatus={displayCourier.status}
@@ -169,7 +155,6 @@ export default function CourierPage() {
         />
       </section>
 
-      {/* Quick Stats */}
       <section>
         <QuickStats
           todayEarnings={displayStats.today.total_earnings}
@@ -182,12 +167,10 @@ export default function CourierPage() {
         />
       </section>
 
-      {/* Quick Actions */}
       <section className="space-y-3">
         <h2 className="text-lg font-semibold text-white">Быстрый доступ</h2>
-        
+
         <div className="grid grid-cols-2 gap-3">
-          {/* New orders */}
           <Link
             href="/courier/orders/available"
             className="group relative overflow-hidden rounded-2xl border border-[#2D2A26] bg-[#1A1918] p-4 transition-all duration-200 hover:border-primary/50"
@@ -201,8 +184,7 @@ export default function CourierPage() {
               <p className="text-xs text-neutral-500 mt-1">Доступные для принятия</p>
             </div>
           </Link>
-          
-          {/* My orders */}
+
           <Link
             href="/courier/orders"
             className="group relative overflow-hidden rounded-2xl border border-[#2D2A26] bg-[#1A1918] p-4 transition-all duration-200 hover:border-blue-500/50"
@@ -219,7 +201,6 @@ export default function CourierPage() {
         </div>
       </section>
 
-      {/* Earnings preview */}
       <section className="rounded-2xl border border-[#2D2A26] bg-[#1A1918] p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -246,7 +227,6 @@ export default function CourierPage() {
         </div>
       </section>
 
-      {/* Bottom Navigation */}
       <BottomNav courierName={displayCourier.name} />
     </div>
   );

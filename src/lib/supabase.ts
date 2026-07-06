@@ -36,6 +36,7 @@ export const fetchRestaurantById = async (restaurantId: string): Promise<Restaur
     .from("restaurants")
     .select("*")
     .eq("id", restaurantId)
+    .eq("is_active", true)
     .single();
 
   if (error) {

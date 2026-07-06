@@ -4,11 +4,12 @@ import React, { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Mail, User, Lock, Phone, ArrowRight, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { getSafeRedirectPath } from "@/lib/safe-redirect";
 
 export default function AuthForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get("redirect") || "/";
+  const redirect = getSafeRedirectPath(searchParams.get("redirect"), "/");
   const { signIn, signUp, user } = useAuth();
 
   const [mode, setMode] = useState<"login" | "register">("login");

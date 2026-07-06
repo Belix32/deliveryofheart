@@ -20,6 +20,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [items, setItems] = useState<CartItem[]>([]);
   const [restaurant, setRestaurant] = useState<any>(null);
   const [deliveryPrice, setDeliveryPrice] = useState(0);
+  const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("cart");
@@ -33,11 +34,13 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         console.error("Error parsing cart", e);
       }
     }
+    setIsHydrated(true);
   }, []);
 
   useEffect(() => {
+    if (!isHydrated) return;
     localStorage.setItem("cart", JSON.stringify({ items, restaurant, deliveryPrice }));
-  }, [items, restaurant, deliveryPrice]);
+  }, [items, restaurant, deliveryPrice, isHydrated]);
 
   const addToCart = (dish: Dish, rest: any) => {
     // Если ресторан другой, очищаем корзину

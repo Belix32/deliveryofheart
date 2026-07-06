@@ -3,8 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getAvailableOrders, acceptOrder, getCourierProfileById } from "@/lib/api/couriers";
-import { useAuth } from "@/context/AuthContext";
+import { fetchAvailableOrders, acceptCourierOrder } from "@/lib/courier-client";
 import OrderCard from "@/components/courier/OrderCard";
 import BottomNav from "@/components/courier/BottomNav";
 import { ArrowLeft, Filter, SlidersHorizontal, RefreshCw, Package } from "lucide-react";
@@ -27,25 +26,19 @@ type FilterType = "all" | "nearby" | "expensive";
 
 export default function AvailableOrdersPage() {
   const router = useRouter();
-  const { user } = useAuth();
   const [orders, setOrders] = useState<AvailableOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [filter, setFilter] = useState<FilterType>("all");
   const [acceptingOrderId, setAcceptingOrderId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [courierId, setCourierId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchOrders = useCallback(async () => {
     try {
       setError(null);
-      const response = await fetch("/api/courier/orders?type=available");
-      if (!response.ok) {
-        throw new Error("Failed to load orders");
-      }
-      const data = await response.json();
-      setOrders(data.orders || []);
+      const data = await fetchAvailableOrders();
+      setOrders(data as AvailableOrder[]);
     } catch (err) {
       console.error("Ошибка загрузки заказов:", err);
       setError("Не удалось загрузить заказы");
@@ -55,74 +48,34 @@ export default function AvailableOrdersPage() {
     }
   }, []);
 
-  // Получение ID курьера при загрузке
   useEffect(() => {
-    const initCourier = async () => {
-      if (!user?.id) return;
-      
-      try {
-        const profile = await getCourierProfileById(user.id);
-        if (profile) {
-          setCourierId(profile.id);
-        }
-      } catch (err) {
-        console.error("Ошибка получения профиля курьера:", err);
-        setError("Не удалось получить данные курьера");
-        setIsLoading(false);
-      }
-    };
-    
-    initCourier();
-  }, [user?.id]);
+    fetchOrders();
+  }, [fetchOrders]);
 
-  // Загрузка заказов после получения courierId
   useEffect(() => {
-    if (courierId) {
-      fetchOrders();
-    }
-  }, [courierId, fetchOrders]);
-
-  // Polling для новых заказов каждые 30 секунд
-  useEffect(() => {
-    if (!courierId) return;
-    
     const interval = setInterval(fetchOrders, 30000);
     return () => clearInterval(interval);
-  }, [courierId, fetchOrders]);
+  }, [fetchOrders]);
 
-  // Pull-to-refresh handler
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await fetchOrders();
   }, [fetchOrders]);
 
   const handleAccept = async (orderId: string) => {
-    if (!courierId) {
-      setError("Данные курьера не найдены");
-      return;
-    }
-    
     setAcceptingOrderId(orderId);
     try {
-      const success = await acceptOrder(orderId, courierId);
-      
-      if (success) {
-        // Удаляем из списка после принятия
-        setOrders((prev) => prev.filter((o) => o.id !== orderId));
-        // Перенаправляем на страницу заказов
-        router.push("/courier/orders");
-      } else {
-        setError("Не удалось принять заказ. Возможно, его уже взяли.");
-      }
+      await acceptCourierOrder(orderId);
+      setOrders((prev) => prev.filter((o) => o.id !== orderId));
+      router.push("/courier/orders");
     } catch (err) {
       console.error("Ошибка принятия заказа:", err);
-      setError("Ошибка при принятии заказа");
+      setError("Не удалось принять заказ. Возможно, его уже взяли.");
     } finally {
       setAcceptingOrderId(null);
     }
   };
 
-  // Фильтрация заказов
   const filteredOrders = [...orders].sort((a, b) => {
     if (filter === "nearby") {
       return (a.delivery_distance || 0) - (b.delivery_distance || 0);
@@ -146,7 +99,6 @@ export default function AvailableOrdersPage() {
 
   return (
     <div className="min-h-screen bg-[#0A0A09]">
-      {/* Header */}
       <header className="sticky top-0 z-40 bg-[#0A0A09]/95 backdrop-blur-md border-b border-[#2D2A26]">
         <div className="flex items-center justify-between px-4 py-3">
           <Link
@@ -156,9 +108,9 @@ export default function AvailableOrdersPage() {
             <ArrowLeft className="w-5 h-5" />
             <span>Назад</span>
           </Link>
-          
+
           <h1 className="text-lg font-semibold text-white">Доступные заказы</h1>
-          
+
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={`p-2 rounded-lg transition-colors ${
@@ -168,8 +120,7 @@ export default function AvailableOrdersPage() {
             <Filter className="w-5 h-5" />
           </button>
         </div>
-        
-        {/* Filters panel */}
+
         {showFilters && (
           <div className="px-4 pb-3 space-y-3">
             <div className="flex items-center gap-2">
@@ -197,16 +148,13 @@ export default function AvailableOrdersPage() {
         )}
       </header>
 
-      {/* Error message */}
       {error && (
         <div className="mx-4 mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
           <p className="text-red-400 text-sm">{error}</p>
         </div>
       )}
 
-      {/* Content */}
       <main className="p-4 pb-20">
-        {/* Refresh indicator */}
         {isRefreshing && (
           <div className="flex items-center justify-center py-4">
             <div className="flex items-center gap-2 text-neutral-400">
@@ -216,7 +164,6 @@ export default function AvailableOrdersPage() {
           </div>
         )}
 
-        {/* Orders count */}
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm text-neutral-400">
             Найдено {filteredOrders.length} заказов
@@ -231,7 +178,6 @@ export default function AvailableOrdersPage() {
           </button>
         </div>
 
-        {/* Orders list */}
         {filteredOrders.length > 0 ? (
           <div className="space-y-4">
             {filteredOrders.map((order) => (
@@ -251,9 +197,7 @@ export default function AvailableOrdersPage() {
               <Package className="w-8 h-8 text-neutral-500" />
             </div>
             <h3 className="text-lg font-medium text-white mb-2">Заказов нет</h3>
-            <p className="text-sm text-neutral-500">
-              Новые заказы появятся здесь
-            </p>
+            <p className="text-sm text-neutral-500">Новые заказы появятся здесь</p>
             <button
               onClick={handleRefresh}
               className="mt-4 px-4 py-2 rounded-xl bg-primary text-white text-sm hover:bg-primary-dark transition-colors"
@@ -264,7 +208,6 @@ export default function AvailableOrdersPage() {
         )}
       </main>
 
-      {/* Bottom Navigation */}
       <BottomNav />
     </div>
   );

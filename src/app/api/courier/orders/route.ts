@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAuth, withCourier } from "@/lib/auth/api-auth";
-import { getAvailableOrders, getCourierProfile, getOrdersForCourier } from "@/lib/api/couriers";
+import { getAvailableOrders, getCourierProfile, getCourierOrders, getOrdersForCourier } from "@/lib/api/couriers";
 import { APP_CITY } from "@/lib/config";
 
 export async function GET(request: NextRequest) {
@@ -14,9 +14,11 @@ export async function GET(request: NextRequest) {
     }
 
     const orders =
-      type === "my"
-        ? await getOrdersForCourier(profile.id)
-        : await getAvailableOrders(profile.current_city || APP_CITY);
+      type === "assigned"
+        ? await getCourierOrders(profile.id)
+        : type === "my"
+          ? await getOrdersForCourier(profile.id)
+          : await getAvailableOrders(profile.current_city || APP_CITY);
 
     return NextResponse.json({ orders });
   });

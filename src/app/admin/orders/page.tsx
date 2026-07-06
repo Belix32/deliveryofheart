@@ -102,7 +102,7 @@ const OrdersPage: React.FC = () => {
       loadOrders();
     }, 10000);
     return () => clearInterval(interval);
-  }, [cityFilter]);
+  }, [cityFilter, page]);
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
     await supabase
@@ -119,6 +119,8 @@ const OrdersPage: React.FC = () => {
       confirmed: CheckCircle,
       preparing: Package,
       ready: CheckCircle,
+      waiting_courier: Truck,
+      in_delivery: Truck,
       delivering: Truck,
       delivered: Home,
       cancelled: XCircle,
@@ -132,7 +134,9 @@ const OrdersPage: React.FC = () => {
       confirmed: "Подтверждён",
       preparing: "Готовится",
       ready: "Готов",
-      delivering: "В пути",
+      waiting_courier: "Ждёт курьера",
+      in_delivery: "В доставке",
+      delivering: "В доставке",
       delivered: "Доставлен",
       cancelled: "Отменён",
     };
@@ -145,6 +149,8 @@ const OrdersPage: React.FC = () => {
       confirmed: "bg-blue-500/20 text-blue-500",
       preparing: "bg-orange-500/20 text-orange-500",
       ready: "bg-green-500/20 text-green-500",
+      waiting_courier: "bg-purple-500/20 text-purple-500",
+      in_delivery: "bg-purple-500/20 text-purple-500",
       delivering: "bg-purple-500/20 text-purple-500",
       delivered: "bg-green-500/20 text-green-500",
       cancelled: "bg-red-500/20 text-red-500",
@@ -260,7 +266,7 @@ const OrdersPage: React.FC = () => {
         >
           Все ({orders.length})
         </button>
-        {["pending", "confirmed", "preparing", "ready", "delivering", "delivered"].map(
+        {["pending", "confirmed", "preparing", "ready", "waiting_courier", "in_delivery", "delivered"].map(
           (status) => (
             <button
               key={status}
@@ -420,13 +426,13 @@ const OrdersPage: React.FC = () => {
                   )}
                   {order.status === "ready" && (
                     <button
-                      onClick={() => updateOrderStatus(order.id, "delivering")}
+                      onClick={() => updateOrderStatus(order.id, "waiting_courier")}
                       className="px-3 py-2 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600"
                     >
-                      В доставку
+                      Ждёт курьера
                     </button>
                   )}
-                  {order.status === "delivering" && (
+                  {order.status === "in_delivery" && (
                     <button
                       onClick={() => updateOrderStatus(order.id, "delivered")}
                       className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"
