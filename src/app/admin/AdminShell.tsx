@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -51,6 +51,16 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const pathname = usePathname();
   const { isDark, toggleTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    document.documentElement.classList.add("dark");
+    return () => {
+      const saved = localStorage.getItem("theme");
+      if (saved !== "dark") {
+        document.documentElement.classList.remove("dark");
+      }
+    };
+  }, []);
 
   return (
     <div className="flex min-h-screen bg-[#0a0a0a]">

@@ -12,10 +12,14 @@ import {
   Package,
   Truck,
   Home,
+  Download,
 } from "lucide-react";
 import AdminLoader from "@/components/admin/AdminLoader";
 import AdminModal from "@/components/admin/AdminModal";
 import AdminEmptyState from "@/components/admin/AdminEmptyState";
+import AdminPagination from "@/components/admin/AdminPagination";
+import { adminStyles } from "@/lib/admin/styles";
+import { buildCsv, downloadCsv } from "@/lib/admin/export-csv";
 
 interface City {
   id: string;
@@ -95,6 +99,7 @@ const OrdersPage: React.FC = () => {
   const [totalCount, setTotalCount] = useState(0);
   const [lastUpdate, setLastUpdate] = useState(new Date());
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [exporting, setExporting] = useState(false);
   const PAGE_SIZE = 20;
 
   useEffect(() => {
@@ -178,6 +183,34 @@ const OrdersPage: React.FC = () => {
     new Set(orders.map((o) => o.restaurants?.name).filter(Boolean))
   );
 
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams({ page: "0", pageSize: "5000" });
+      if (cityFilter !== "all") params.set("city", cityFilter);
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      const response = await fetch(`/api/admin/orders?${params}`);
+      const data = await response.json();
+      const rows: Order[] = data.orders || [];
+      const csv = buildCsv(rows, [
+        { header: "Номер", value: (r) => r.order_number },
+        { header: "Статус", value: (r) => STATUS_LABELS[r.status] || r.status },
+        { header: "Дата", value: (r) => new Date(r.created_at).toLocaleString("ru-RU") },
+        { header: "Ресторан", value: (r) => r.restaurants?.name || "" },
+        { header: "Клиент", value: (r) => r.users?.full_name || "" },
+        { header: "Телефон", value: (r) => r.users?.phone || "" },
+        { header: "Город", value: (r) => r.delivery_city || "" },
+        { header: "Сумма", value: (r) => r.final_amount },
+        { header: "Курьер", value: (r) => r.couriers?.name || "" },
+      ]);
+      downloadCsv(`orders-${new Date().toISOString().slice(0, 10)}.csv`, csv);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   if (loading) return <AdminLoader />;
 
   return (
@@ -192,6 +225,15 @@ const OrdersPage: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={exporting}
+            className={`${adminStyles.buttonPrimary} flex items-center gap-2`}
+          >
+            <Download className="w-4 h-4" />
+            {exporting ? "Экспорт…" : "Экспорт"}
+          </button>
           <div className="relative">
             <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#2D2A26]/40" />
             <select
@@ -337,21 +379,13 @@ const OrdersPage: React.FC = () => {
         {filteredOrders.length === 0 && <AdminEmptyState icon={Package} title="Заказов не найдено" />}
 
         {totalCount > PAGE_SIZE && (
-          <div className="flex items-center justify-between">
-            <button disabled={page === 0} onClick={() => setPage((p) => p - 1)} className="px-4 py-2 rounded-xl bg-[#F5F3F0] dark:bg-[#2D2A26] disabled:opacity-50">
-              Назад
-            </button>
-            <span className="text-sm text-[#2D2A26]/60">
-              Страница {page + 1} из {Math.ceil(totalCount / PAGE_SIZE)}
-            </span>
-            <button
-              disabled={(page + 1) * PAGE_SIZE >= totalCount}
-              onClick={() => setPage((p) => p + 1)}
-              className="px-4 py-2 rounded-xl bg-[#F5F3F0] dark:bg-[#2D2A26] disabled:opacity-50"
-            >
-              Далее
-            </button>
-          </div>
+          <AdminPagination
+            page={page}
+            totalPages={totalPages}
+            total={totalCount}
+            onPageChange={setPage}
+            zeroBased
+          />
         )}
       </div>
 

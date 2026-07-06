@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 import { getUserRolesWithClient } from "@/lib/auth/check-role";
+import { isDesignatedAdmin } from "@/lib/auth/admin-access";
 
 const AUTH_REQUIRED_PREFIXES = ["/cart", "/grocery/cart", "/profile", "/order", "/favorites"];
 const PUBLIC_PREFIXES = ["/", "/auth", "/catalog", "/restaurant", "/api/auth"];
@@ -45,7 +46,7 @@ export async function middleware(request: NextRequest) {
     }
 
     const roles = await getUserRolesWithClient(supabase, user.id);
-    if (!roles.includes("admin")) {
+    if (!roles.includes("admin") || !isDesignatedAdmin(user.id)) {
       const url = request.nextUrl.clone();
       url.pathname = "/";
       return NextResponse.redirect(url);

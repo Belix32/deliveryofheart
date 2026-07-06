@@ -1,7 +1,10 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Loader2, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
+import AdminPageHeader from "@/components/admin/AdminPageHeader";
+import AdminPagination from "@/components/admin/AdminPagination";
+import { adminStyles } from "@/lib/admin/styles";
 
 interface LogRow {
   id: string;
@@ -73,58 +76,53 @@ const LogsPage: React.FC = () => {
 
   return (
     <div className="animate-fade-in">
-      <div className="mb-6">
-        <h1 className="text-2xl font-display font-bold">Логи системы</h1>
-        <p className="text-[#2D2A26]/60 dark:text-[#E8E6E3]/60">
-          Журнал действий администраторов ({total} записей)
-        </p>
-      </div>
+      <AdminPageHeader
+        title="Логи системы"
+        subtitle={`Журнал действий администраторов (${total} записей)`}
+      />
 
-      <div className="bg-white dark:bg-[#2D2A26] rounded-2xl border border-[#F5F3F0] dark:border-[#3D3A36] p-4 mb-4">
+      <div className={`${adminStyles.cardPadding} mb-4`}>
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
           <div>
-            <label className="block text-xs font-medium mb-1 text-[#2D2A26]/60">Действие</label>
+            <label className="block text-xs font-medium mb-1 text-gray-400">Действие</label>
             <input
               type="text"
               value={action}
               onChange={(e) => setAction(e.target.value)}
               placeholder="create, update..."
-              className="w-full px-3 py-2 rounded-lg bg-[#F5F3F0] dark:bg-[#3D3A36] border-0 text-sm"
+              className={adminStyles.input}
             />
           </div>
           <div>
-            <label className="block text-xs font-medium mb-1 text-[#2D2A26]/60">Тип сущности</label>
+            <label className="block text-xs font-medium mb-1 text-gray-400">Тип сущности</label>
             <input
               type="text"
               value={entityType}
               onChange={(e) => setEntityType(e.target.value)}
               placeholder="banner, order..."
-              className="w-full px-3 py-2 rounded-lg bg-[#F5F3F0] dark:bg-[#3D3A36] border-0 text-sm"
+              className={adminStyles.input}
             />
           </div>
           <div>
-            <label className="block text-xs font-medium mb-1 text-[#2D2A26]/60">С даты</label>
+            <label className="block text-xs font-medium mb-1 text-gray-400">С даты</label>
             <input
               type="date"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-[#F5F3F0] dark:bg-[#3D3A36] border-0 text-sm"
+              className={adminStyles.input}
             />
           </div>
           <div>
-            <label className="block text-xs font-medium mb-1 text-[#2D2A26]/60">По дату</label>
+            <label className="block text-xs font-medium mb-1 text-gray-400">По дату</label>
             <input
               type="date"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-[#F5F3F0] dark:bg-[#3D3A36] border-0 text-sm"
+              className={adminStyles.input}
             />
           </div>
           <div className="flex items-end">
-            <button
-              onClick={applyFilters}
-              className="w-full px-3 py-2 bg-primary text-white rounded-lg text-sm"
-            >
+            <button type="button" onClick={applyFilters} className={`${adminStyles.buttonPrimary} w-full`}>
               Применить
             </button>
           </div>
@@ -132,7 +130,7 @@ const LogsPage: React.FC = () => {
       </div>
 
       {error && (
-        <div className="mb-4 flex items-center gap-2 p-4 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-xl">
+        <div className={`${adminStyles.errorBox} mb-4`}>
           <AlertCircle className="w-5 h-5" />
           {error}
         </div>
@@ -143,71 +141,46 @@ const LogsPage: React.FC = () => {
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
       ) : logs.length === 0 ? (
-        <div className="bg-white dark:bg-[#2D2A26] rounded-2xl border p-12 text-center text-[#2D2A26]/60">
+        <div className={`${adminStyles.cardPadding} text-center text-gray-400`}>
           Записей не найдено. Действия администраторов появятся здесь после изменений в системе.
         </div>
       ) : (
-        <div className="bg-white dark:bg-[#2D2A26] rounded-2xl border border-[#F5F3F0] dark:border-[#3D3A36] overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[#F5F3F0] dark:border-[#3D3A36] text-left text-[#2D2A26]/60 bg-[#F5F3F0]/50 dark:bg-[#3D3A36]/50">
-                  <th className="px-5 py-3 font-medium">Администратор</th>
-                  <th className="px-5 py-3 font-medium">Действие</th>
-                  <th className="px-5 py-3 font-medium">Сущность</th>
-                  <th className="px-5 py-3 font-medium">Дата</th>
-                </tr>
-              </thead>
-              <tbody>
-                {logs.map((log) => (
-                  <tr
-                    key={log.id}
-                    className="border-b border-[#F5F3F0] dark:border-[#3D3A36] last:border-0"
-                  >
-                    <td className="px-5 py-3">{log.actor_email}</td>
-                    <td className="px-5 py-3">
-                      <span className="px-2 py-0.5 bg-primary/10 text-primary rounded text-xs font-medium">
-                        {log.action}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-[#2D2A26]/70 dark:text-[#E8E6E3]/70">
-                      {formatEntity(log)}
-                    </td>
-                    <td className="px-5 py-3 text-[#2D2A26]/60 whitespace-nowrap">
-                      {log.created_at
-                        ? new Date(log.created_at).toLocaleString("ru-RU")
-                        : "—"}
-                    </td>
+        <>
+          <div className={`${adminStyles.card} overflow-hidden mb-4`}>
+            <div className="overflow-x-auto">
+              <table className={adminStyles.table}>
+                <thead>
+                  <tr className={adminStyles.tableHead}>
+                    <th className="px-5 py-3 font-medium">Администратор</th>
+                    <th className="px-5 py-3 font-medium">Действие</th>
+                    <th className="px-5 py-3 font-medium">Сущность</th>
+                    <th className="px-5 py-3 font-medium">Дата</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {logs.map((log) => (
+                    <tr key={log.id} className={adminStyles.tableRow}>
+                      <td className="px-5 py-3">{log.actor_email}</td>
+                      <td className="px-5 py-3">
+                        <span className="px-2 py-0.5 bg-primary/20 text-primary rounded text-xs font-medium">
+                          {log.action}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-gray-400">{formatEntity(log)}</td>
+                      <td className="px-5 py-3 text-gray-400 whitespace-nowrap">
+                        {log.created_at
+                          ? new Date(log.created_at).toLocaleString("ru-RU")
+                          : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-5 py-3 border-t border-[#F5F3F0] dark:border-[#3D3A36]">
-              <span className="text-sm text-[#2D2A26]/60">
-                Страница {page} из {totalPages}
-              </span>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page <= 1}
-                  className="p-2 rounded-lg hover:bg-[#F5F3F0] dark:hover:bg-[#3D3A36] disabled:opacity-30"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page >= totalPages}
-                  className="p-2 rounded-lg hover:bg-[#F5F3F0] dark:hover:bg-[#3D3A36] disabled:opacity-30"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+          <AdminPagination page={page} totalPages={totalPages} total={total} onPageChange={setPage} />
+        </>
       )}
     </div>
   );

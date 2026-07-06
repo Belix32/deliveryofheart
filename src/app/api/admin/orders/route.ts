@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAdmin } from "@/lib/auth/api-auth";
+import { logAdminAction } from "@/lib/admin/audit";
+import { parseJsonBody } from "@/lib/admin/validate";
+import { orderPatchSchema } from "@/lib/admin/schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { updateOrderStatus } from "@/lib/api/orders";
 
@@ -50,18 +53,16 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   const result = await withAdmin(async (userId) => {
-    const body = await request.json();
-    const { order_id, status, note } = body;
+    const parsed = await parseJsonBody(request, orderPatchSchema);
+    if (!parsed.ok) return parsed.response;
 
-    if (!order_id || !status) {
-      return NextResponse.json({ error: "Укажите order_id и status" }, { status: 400 });
-    }
-
+    const { order_id, status, note } = parsed.data;
     const success = await updateOrderStatus(order_id, status, note, userId, "admin");
     if (!success) {
       return NextResponse.json({ error: "Ошибка обновления статуса" }, { status: 500 });
     }
 
+    await logAdminAction(userId, "update", "order", order_id, { status, note });
     return NextResponse.json({ success: true });
   });
 

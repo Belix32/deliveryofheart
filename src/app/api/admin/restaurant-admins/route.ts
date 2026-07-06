@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAdmin } from "@/lib/auth/api-auth";
+import { logAdminAction } from "@/lib/admin/audit";
+import { parseJsonBody, parseQuery } from "@/lib/admin/validate";
+import { restaurantAdminAssignSchema, userRoleIdQuerySchema } from "@/lib/admin/schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const RESTAURANT_ROLES = ["restaurant_owner", "restaurant_admin"] as const;
@@ -76,43 +79,27 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const result = await withAdmin(async (actorId) => {
-    const body = await request.json();
-    const { target_user_id, role_name, restaurant_id, email } = body;
+    const parsed = await parseJsonBody(request, restaurantAdminAssignSchema);
+    if (!parsed.ok) return parsed.response;
 
-    if (role_name === "admin") {
-      return NextResponse.json(
-        { error: "Роль admin нельзя назначить через этот API" },
-        { status: 403 }
-      );
-    }
-
-    if (!role_name || !RESTAURANT_ROLES.includes(role_name)) {
-      return NextResponse.json(
-        { error: "Допустимые роли: restaurant_owner, restaurant_admin" },
-        { status: 400 }
-      );
-    }
-
-    if (!restaurant_id) {
-      return NextResponse.json({ error: "Укажите ресторан" }, { status: 400 });
-    }
+    const { target_user_id, email, role_name, restaurant_id } = parsed.data;
 
     const admin = createAdminClient();
 
-    let userId = target_user_id as string | undefined;
+    let userId = target_user_id;
     if (!userId && email) {
       const { data: userRow } = await admin
         .from("users")
         .select("id")
-        .ilike("email", String(email).trim())
+        .ilike("email", email.trim())
         .maybeSingle();
       userId = userRow?.id;
     }
 
     if (!userId) {
       return NextResponse.json(
-        { error: "Укажите пользователя (target_user_id или email)" },
-        { status: 400 }
+        { error: "Пользователь с указанным email не найден" },
+        { status: 404 }
       );
     }
 
@@ -153,6 +140,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    await logAdminAction(actorId, "assign_role", "user", userId, {
+      role_name,
+      restaurant_id,
+    });
     return NextResponse.json({ success: true, message: "Роль назначена" });
   });
 
@@ -160,18 +151,15 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const result = await withAdmin(async () => {
-    const { searchParams } = new URL(request.url);
-    const user_role_id = searchParams.get("user_role_id");
+  const result = await withAdmin(async (userId) => {
+    const parsed = parseQuery(new URL(request.url).searchParams, userRoleIdQuerySchema);
+    if (!parsed.ok) return parsed.response;
 
-    if (!user_role_id) {
-      return NextResponse.json({ error: "Укажите user_role_id" }, { status: 400 });
-    }
-
+    const { user_role_id } = parsed.data;
     const admin = createAdminClient();
     const { data: roleRow } = await admin
       .from("user_roles")
-      .select("id, roles(name)")
+      .select("id, user_id, roles(name)")
       .eq("id", user_role_id)
       .maybeSingle();
 
@@ -200,6 +188,9 @@ export async function DELETE(request: NextRequest) {
 
     await admin.from("user_roles").update({ is_active: false }).eq("id", user_role_id);
 
+    await logAdminAction(userId, "revoke_role", "user_role", user_role_id, {
+      user_id: roleRow.user_id,
+    });
     return NextResponse.json({ success: true, message: "Роль деактивирована" });
   });
 

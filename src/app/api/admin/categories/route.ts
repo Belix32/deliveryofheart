@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAdmin } from "@/lib/auth/api-auth";
+import { logAdminAction } from "@/lib/admin/audit";
+import { parseJsonBody, parseQuery } from "@/lib/admin/validate";
+import {
+  categoryCreateSchema,
+  categoryPatchSchema,
+  idQuerySchema,
+} from "@/lib/admin/schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET() {
@@ -26,23 +33,15 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const result = await withAdmin(async () => {
-    const body = await request.json();
-    const { name, restaurant_id, sort_order, is_active } = body;
+  const result = await withAdmin(async (userId) => {
+    const parsed = await parseJsonBody(request, categoryCreateSchema);
+    if (!parsed.ok) return parsed.response;
 
-    if (!name || !restaurant_id) {
-      return NextResponse.json({ error: "Укажите name и restaurant_id" }, { status: 400 });
-    }
-
+    const { name, restaurant_id, sort_order, is_active } = parsed.data;
     const admin = createAdminClient();
     const { data, error } = await admin
       .from("categories")
-      .insert({
-        name,
-        restaurant_id,
-        sort_order: sort_order ?? 0,
-        is_active: is_active ?? true,
-      })
+      .insert({ name, restaurant_id, sort_order, is_active })
       .select(
         `
         *,
@@ -55,6 +54,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    await logAdminAction(userId, "create", "category", data.id, { name });
     return NextResponse.json({ category: data }, { status: 201 });
   });
 
@@ -62,24 +62,11 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const result = await withAdmin(async () => {
-    const body = await request.json();
-    const { id, name, sort_order, is_active, restaurant_id } = body;
+  const result = await withAdmin(async (userId) => {
+    const parsed = await parseJsonBody(request, categoryPatchSchema);
+    if (!parsed.ok) return parsed.response;
 
-    if (!id) {
-      return NextResponse.json({ error: "Укажите id категории" }, { status: 400 });
-    }
-
-    const updates: Record<string, unknown> = {};
-    if (name !== undefined) updates.name = name;
-    if (sort_order !== undefined) updates.sort_order = sort_order;
-    if (is_active !== undefined) updates.is_active = is_active;
-    if (restaurant_id !== undefined) updates.restaurant_id = restaurant_id;
-
-    if (Object.keys(updates).length === 0) {
-      return NextResponse.json({ error: "Нет полей для обновления" }, { status: 400 });
-    }
-
+    const { id, ...updates } = parsed.data;
     const admin = createAdminClient();
     const { data, error } = await admin
       .from("categories")
@@ -97,6 +84,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    await logAdminAction(userId, "update", "category", id, updates);
     return NextResponse.json({ category: data });
   });
 
@@ -104,14 +92,11 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const result = await withAdmin(async () => {
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get("id");
+  const result = await withAdmin(async (userId) => {
+    const parsed = parseQuery(new URL(request.url).searchParams, idQuerySchema);
+    if (!parsed.ok) return parsed.response;
 
-    if (!id) {
-      return NextResponse.json({ error: "Укажите id" }, { status: 400 });
-    }
-
+    const { id } = parsed.data;
     const admin = createAdminClient();
     const { error } = await admin.from("categories").delete().eq("id", id);
 
@@ -119,6 +104,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    await logAdminAction(userId, "delete", "category", id);
     return NextResponse.json({ success: true });
   });
 

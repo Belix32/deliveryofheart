@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { checkIsAdmin, checkIsCourier } from "@/lib/auth/check-role";
+import { checkIsCourier } from "@/lib/auth/check-role";
+import { isPlatformAdmin } from "@/lib/auth/admin-access";
 
 export async function getSessionUser() {
   const supabase = await createClient();
@@ -23,8 +24,7 @@ export async function requireSessionUser() {
 
 export async function requireAdmin() {
   const user = await requireSessionUser();
-  const isAdmin = await checkIsAdmin(user.id);
-  if (!isAdmin) {
+  if (!(await isPlatformAdmin(user.id))) {
     throw new AuthError("Доступ запрещён", 403);
   }
   return user;

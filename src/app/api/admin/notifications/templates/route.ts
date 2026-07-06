@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAdmin } from "@/lib/auth/api-auth";
 import { logAdminAction } from "@/lib/admin/audit";
+import { parseJsonBody, parseQuery } from "@/lib/admin/validate";
+import {
+  notificationTemplateCreateSchema,
+  notificationTemplatePatchSchema,
+  idQuerySchema,
+} from "@/lib/admin/schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET() {
@@ -25,27 +31,18 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const result = await withAdmin(async (userId) => {
-    const body = await request.json();
-    const { name, channel, subject, body: templateBody, is_active = true } = body;
+    const parsed = await parseJsonBody(request, notificationTemplateCreateSchema);
+    if (!parsed.ok) return parsed.response;
 
-    if (!name?.trim()) {
-      return NextResponse.json({ error: "Укажите название шаблона" }, { status: 400 });
-    }
-    if (!templateBody?.trim()) {
-      return NextResponse.json({ error: "Укажите текст шаблона" }, { status: 400 });
-    }
-    if (!channel || !["push", "email", "sms"].includes(channel)) {
-      return NextResponse.json({ error: "Укажите канал: push, email или sms" }, { status: 400 });
-    }
-
+    const { name, channel, subject, body: templateBody, is_active } = parsed.data;
     const admin = createAdminClient();
     const { data, error } = await admin
       .from("notification_templates")
       .insert({
-        name: name.trim(),
+        name,
         channel,
-        subject: subject?.trim() || null,
-        body: templateBody.trim(),
+        subject: subject || null,
+        body: templateBody,
         is_active,
       })
       .select()
@@ -64,13 +61,10 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   const result = await withAdmin(async (userId) => {
-    const body = await request.json();
-    const { id, name, channel, subject, body: templateBody, is_active } = body;
+    const parsed = await parseJsonBody(request, notificationTemplatePatchSchema);
+    if (!parsed.ok) return parsed.response;
 
-    if (!id) {
-      return NextResponse.json({ error: "Укажите id шаблона" }, { status: 400 });
-    }
-
+    const { id, name, channel, subject, body: templateBody, is_active } = parsed.data;
     const updates: Record<string, unknown> = {};
     if (name !== undefined) updates.name = name;
     if (channel !== undefined) updates.channel = channel;
@@ -94,13 +88,10 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   const result = await withAdmin(async (userId) => {
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get("id");
+    const parsed = parseQuery(new URL(request.url).searchParams, idQuerySchema);
+    if (!parsed.ok) return parsed.response;
 
-    if (!id) {
-      return NextResponse.json({ error: "Укажите id" }, { status: 400 });
-    }
-
+    const { id } = parsed.data;
     const admin = createAdminClient();
     const { error } = await admin.from("notification_templates").delete().eq("id", id);
 

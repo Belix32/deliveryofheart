@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAdmin } from "@/lib/auth/api-auth";
 import { logAdminAction } from "@/lib/admin/audit";
+import { parseJsonBody } from "@/lib/admin/validate";
+import { settingsPatchSchema } from "@/lib/admin/schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/database.types";
 
@@ -45,23 +47,21 @@ export async function GET() {
 
 export async function PATCH(request: NextRequest) {
   const result = await withAdmin(async (userId) => {
-    const body = await request.json();
-    const { settings } = body as { settings?: Record<string, string | number> };
+    const parsed = await parseJsonBody(request, settingsPatchSchema);
+    if (!parsed.ok) return parsed.response;
 
-    if (!settings || typeof settings !== "object") {
-      return NextResponse.json({ error: "Укажите объект settings" }, { status: 400 });
-    }
-
+    const { settings } = parsed.data;
     const admin = createAdminClient();
     const updates: Record<string, string | number> = {};
 
     for (const [key, value] of Object.entries(settings)) {
       if (!SETTING_KEYS.includes(key as (typeof SETTING_KEYS)[number])) continue;
-      updates[key] = value;
+      const typedValue = value as string | number;
+      updates[key] = typedValue;
 
       const { error } = await admin.from("app_settings").upsert({
         key,
-        value: value as Json,
+        value: typedValue as Json,
         updated_at: new Date().toISOString(),
         updated_by: userId,
       });

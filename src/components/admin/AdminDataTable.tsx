@@ -1,6 +1,7 @@
 "use client";
 
 import AdminEmptyState from "./AdminEmptyState";
+import { adminStyles } from "@/lib/admin/styles";
 
 export interface AdminColumn<T> {
   key: string;
@@ -32,32 +33,29 @@ export default function AdminDataTable<T>({
   }
 
   return (
-    <div className="bg-white dark:bg-[#2D2A26] rounded-2xl border border-[#F5F3F0] dark:border-[#3D3A36] overflow-hidden overflow-x-auto">
-      <table className="w-full min-w-[640px]">
-        <thead className="bg-[#F5F3F0] dark:bg-[#1a1a1a]">
-          <tr>
+    <div className={`${adminStyles.card} overflow-hidden overflow-x-auto`}>
+      <table className={`${adminStyles.table} min-w-[640px]`}>
+        <thead>
+          <tr className={adminStyles.tableHead}>
             {columns.map((col) => (
               <th
                 key={col.key}
-                className={`px-4 py-3 text-left text-sm font-medium text-[#2D2A26]/60 dark:text-[#E8E6E3]/60 ${col.className || ""}`}
+                className={`px-4 py-3 text-left text-sm font-medium ${col.className || ""}`}
               >
                 {col.header}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-[#F5F3F0] dark:divide-[#3D3A36]">
+        <tbody>
           {data.map((row) => (
             <tr
               key={getKey(row)}
               onClick={onRowClick ? () => onRowClick(row) : undefined}
-              className={`hover:bg-gray-50 dark:hover:bg-[#1a1a1a]/50 ${onRowClick ? "cursor-pointer" : ""}`}
+              className={`${adminStyles.tableRow} ${onRowClick ? "cursor-pointer" : ""}`}
             >
               {columns.map((col) => (
-                <td
-                  key={col.key}
-                  className={`px-4 py-3 text-[#2D2A26] dark:text-[#E8E6E3] ${col.className || ""}`}
-                >
+                <td key={col.key} className={`px-4 py-3 ${col.className || ""}`}>
                   {col.render
                     ? col.render(row)
                     : String((row as Record<string, unknown>)[col.key] ?? "—")}

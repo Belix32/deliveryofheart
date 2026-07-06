@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAdmin } from "@/lib/auth/api-auth";
 import { logAdminAction } from "@/lib/admin/audit";
+import { parseJsonBody } from "@/lib/admin/validate";
+import {
+  notificationCampaignCreateSchema,
+  notificationCampaignPatchSchema,
+} from "@/lib/admin/schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET() {
@@ -61,21 +66,13 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const result = await withAdmin(async (userId) => {
-    const body = await request.json();
-    const { template_id, title, status = "draft" } = body;
+    const parsed = await parseJsonBody(request, notificationCampaignCreateSchema);
+    if (!parsed.ok) return parsed.response;
 
-    if (!title?.trim()) {
-      return NextResponse.json({ error: "Укажите заголовок рассылки" }, { status: 400 });
-    }
-
-    const allowedStatuses = ["draft", "sent_manual"];
-    if (!allowedStatuses.includes(status)) {
-      return NextResponse.json({ error: "Допустимые статусы: draft, sent_manual" }, { status: 400 });
-    }
-
+    const { template_id, title, status } = parsed.data;
     const admin = createAdminClient();
     const insert: Record<string, unknown> = {
-      title: title.trim(),
+      title,
       status,
       template_id: template_id || null,
     };
@@ -108,13 +105,10 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   const result = await withAdmin(async (userId) => {
-    const body = await request.json();
-    const { id, status } = body;
+    const parsed = await parseJsonBody(request, notificationCampaignPatchSchema);
+    if (!parsed.ok) return parsed.response;
 
-    if (!id) {
-      return NextResponse.json({ error: "Укажите id кампании" }, { status: 400 });
-    }
-
+    const { id, status } = parsed.data;
     const updates: Record<string, unknown> = {};
     if (status === "sent_manual") {
       updates.status = "sent_manual";

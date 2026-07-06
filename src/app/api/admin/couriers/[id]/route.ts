@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAdmin } from "@/lib/auth/api-auth";
+import { logAdminAction } from "@/lib/admin/audit";
+import { parseJsonBody } from "@/lib/admin/validate";
+import { courierPatchSchema } from "@/lib/admin/schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   getCourierProfileById,
@@ -21,7 +24,7 @@ export async function GET(
 
     const courier = await getCourierProfileById(id);
     if (!courier) {
-      return NextResponse.json({ error: "Courier not found" }, { status: 404 });
+      return NextResponse.json({ error: "Курьер не найден" }, { status: 404 });
     }
 
     const response: Record<string, unknown> = { courier };
@@ -39,15 +42,12 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const result = await withAdmin(async () => {
+  const result = await withAdmin(async (userId) => {
     const { id } = await params;
-    const body = await request.json();
-    const { is_active } = body;
+    const parsed = await parseJsonBody(request, courierPatchSchema);
+    if (!parsed.ok) return parsed.response;
 
-    if (is_active === undefined) {
-      return NextResponse.json({ error: "Укажите is_active" }, { status: 400 });
-    }
-
+    const { is_active } = parsed.data;
     const admin = createAdminClient();
     const { error } = await admin
       .from("couriers")
@@ -58,6 +58,7 @@ export async function PATCH(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    await logAdminAction(userId, "update", "courier", id, { is_active });
     return NextResponse.json({ success: true });
   });
 

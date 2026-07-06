@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAdmin } from "@/lib/auth/api-auth";
+import { logAdminAction } from "@/lib/admin/audit";
+import { parseJsonBody, parseQuery } from "@/lib/admin/validate";
+import { couponCreateSchema, couponPatchSchema, idQuerySchema } from "@/lib/admin/schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET() {
@@ -21,8 +24,10 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const result = await withAdmin(async () => {
-    const body = await request.json();
+  const result = await withAdmin(async (userId) => {
+    const parsed = await parseJsonBody(request, couponCreateSchema);
+    if (!parsed.ok) return parsed.response;
+
     const {
       code,
       description,
@@ -33,28 +38,21 @@ export async function POST(request: NextRequest) {
       valid_to,
       is_active,
       scope,
-    } = body;
-
-    if (!code || !discount_type || discount_value === undefined) {
-      return NextResponse.json(
-        { error: "Укажите code, discount_type и discount_value" },
-        { status: 400 }
-      );
-    }
+    } = parsed.data;
 
     const admin = createAdminClient();
     const { data, error } = await admin
       .from("coupons")
       .insert({
-        code: String(code).toUpperCase().trim(),
+        code: code.toUpperCase(),
         description: description || null,
         discount_type,
-        discount_value: Number(discount_value),
-        min_order_amount: min_order_amount ? Number(min_order_amount) : 0,
-        max_uses: max_uses ? Number(max_uses) : null,
+        discount_value,
+        min_order_amount: min_order_amount ?? 0,
+        max_uses: max_uses ?? null,
         valid_to: valid_to || null,
-        is_active: is_active ?? true,
-        scope: scope || "food",
+        is_active,
+        scope,
         used_count: 0,
         created_at: new Date().toISOString(),
       })
@@ -65,6 +63,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    await logAdminAction(userId, "create", "coupon", data.id, { code: data.code });
     return NextResponse.json({ coupon: data }, { status: 201 });
   });
 
@@ -72,14 +71,11 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const result = await withAdmin(async () => {
-    const body = await request.json();
-    const { id, ...updates } = body;
+  const result = await withAdmin(async (userId) => {
+    const parsed = await parseJsonBody(request, couponPatchSchema);
+    if (!parsed.ok) return parsed.response;
 
-    if (!id) {
-      return NextResponse.json({ error: "Укажите id промокода" }, { status: 400 });
-    }
-
+    const { id, ...updates } = parsed.data;
     const admin = createAdminClient();
     const { error } = await admin.from("coupons").update(updates).eq("id", id);
 
@@ -87,6 +83,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    await logAdminAction(userId, "update", "coupon", id, updates);
     return NextResponse.json({ success: true });
   });
 
@@ -94,14 +91,11 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const result = await withAdmin(async () => {
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get("id");
+  const result = await withAdmin(async (userId) => {
+    const parsed = parseQuery(new URL(request.url).searchParams, idQuerySchema);
+    if (!parsed.ok) return parsed.response;
 
-    if (!id) {
-      return NextResponse.json({ error: "Укажите id" }, { status: 400 });
-    }
-
+    const { id } = parsed.data;
     const admin = createAdminClient();
     const { error } = await admin.from("coupons").delete().eq("id", id);
 
@@ -109,6 +103,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    await logAdminAction(userId, "delete", "coupon", id);
     return NextResponse.json({ success: true });
   });
 
