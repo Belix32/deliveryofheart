@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 import { getUserRolesWithClient } from "@/lib/auth/check-role";
 
-const AUTH_REQUIRED_PREFIXES = ["/cart", "/profile", "/order", "/favorites"];
+const AUTH_REQUIRED_PREFIXES = ["/cart", "/grocery/cart", "/profile", "/order", "/favorites"];
 const PUBLIC_PREFIXES = ["/", "/auth", "/catalog", "/restaurant", "/api/auth"];
 
 function isPublicRoute(pathname: string): boolean {
