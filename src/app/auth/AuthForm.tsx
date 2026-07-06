@@ -10,7 +10,7 @@ export default function AuthForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = getSafeRedirectPath(searchParams.get("redirect"), "/");
-  const { signIn, signUp, user } = useAuth();
+  const { signIn, signUp, user, authUser, loading: authLoading } = useAuth();
 
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
@@ -18,11 +18,18 @@ export default function AuthForm() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const goHome = React.useCallback(() => {
+    router.push(redirect);
+    router.refresh();
+  }, [router, redirect]);
 
   React.useEffect(() => {
-    if (user) router.push(redirect);
-  }, [user, router, redirect]);
+    if (!authLoading && (user || authUser)) {
+      goHome();
+    }
+  }, [user, authUser, authLoading, goHome]);
 
   const handleLogin = async () => {
     setError("");
@@ -31,14 +38,14 @@ export default function AuthForm() {
       return;
     }
 
-    setLoading(true);
+    setSubmitting(true);
     const result = await signIn(email, password);
     if (result.success) {
-      router.push(redirect);
+      goHome();
     } else {
       setError(result.error || "Ошибка входа");
     }
-    setLoading(false);
+    setSubmitting(false);
   };
 
   const handleRegister = async () => {
@@ -56,7 +63,7 @@ export default function AuthForm() {
       return;
     }
 
-    setLoading(true);
+    setSubmitting(true);
     const result = await signUp({
       email,
       password,
@@ -64,11 +71,11 @@ export default function AuthForm() {
       phone: phone.trim() || undefined,
     });
     if (result.success) {
-      router.push(redirect);
+      goHome();
     } else {
       setError(result.error || "Ошибка регистрации");
     }
-    setLoading(false);
+    setSubmitting(false);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -169,10 +176,10 @@ export default function AuthForm() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={submitting}
             className="w-full py-4 bg-primary text-white font-semibold rounded-xl hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
           >
-            {loading ? (
+            {submitting ? (
               "Подождите..."
             ) : mode === "login" ? (
               <>

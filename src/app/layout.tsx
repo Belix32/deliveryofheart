@@ -6,6 +6,7 @@ import { GroceryCartProvider } from "@/context/GroceryCartContext";
 import { AuthProvider } from "@/context/AuthContext";
 import Header from "@/components/Header";
 import MobileNav from "@/components/MobileNav";
+import CookieConsent from "@/components/CookieConsent";
 
 export const metadata: Metadata = {
   title: "Доставка от души",
@@ -29,6 +30,7 @@ export default function RootLayout({
                 <Header />
                 <main className="pb-20 md:pb-4">{children}</main>
                 <MobileNav />
+                <CookieConsent />
               </div>
               </GroceryCartProvider>
             </CartProvider>

@@ -47,12 +47,28 @@ async function syncProfile(
   const response = await fetch("/api/auth/sync-profile", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify(data ?? {}),
   });
 
   if (!response.ok) return null;
   const { profile } = await response.json();
   return profile as UserProfile;
+}
+
+async function loadProfile(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  syncData?: { full_name?: string; phone?: string }
+) {
+  const { data: profile } = await supabase
+    .from("users")
+    .select("*")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (profile) return profile as UserProfile;
+  return syncProfile(supabase, syncData);
 }
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -70,18 +86,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setAuthUser(sessionUser);
 
       if (sessionUser) {
-        const { data: profile } = await supabase
-          .from("users")
-          .select("*")
-          .eq("id", sessionUser.id)
-          .single();
-
-        if (profile) {
-          setUser(profile);
-        } else {
-          const synced = await syncProfile(supabase);
-          setUser(synced);
-        }
+        const profile = await loadProfile(supabase, sessionUser.id);
+        if (profile) setUser(profile);
       }
 
       setLoading(false);
@@ -94,12 +100,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setAuthUser(session?.user ?? null);
       if (session?.user) {
-        const { data: profile } = await supabase
-          .from("users")
-          .select("*")
-          .eq("id", session.user.id)
-          .single();
-        setUser(profile ?? null);
+        const profile = await loadProfile(supabase, session.user.id);
+        setUser(profile);
       } else {
         setUser(null);
       }
@@ -119,8 +121,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return { success: false, error: error.message };
       }
 
-      const profile = await syncProfile(supabase);
-      if (profile) setUser(profile);
+      const {
+        data: { user: sessionUser },
+      } = await supabase.auth.getUser();
+      if (sessionUser) {
+        setAuthUser(sessionUser);
+        const profile = await loadProfile(supabase, sessionUser.id);
+        if (profile) setUser(profile);
+      }
 
       return { success: true };
     } catch (e: unknown) {
@@ -154,7 +162,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
       }
 
-      const profile = await syncProfile(supabase, {
+      setAuthUser(data.session.user);
+
+      const profile = await loadProfile(supabase, data.session.user.id, {
         full_name: name.trim(),
         phone,
       });
