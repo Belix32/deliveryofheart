@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAdmin } from "@/lib/auth/api-auth";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   getCourierProfileById,
   getCourierOrders,
@@ -25,10 +26,39 @@ export async function GET(
 
     const response: Record<string, unknown> = { courier };
     if (includeOrders) response.orders = await getCourierOrders(id);
-    if (includeEarnings) response.earnings = await getCourierEarnings(id);
+    if (includeEarnings) response.earnings = await getCourierEarnings(id, "weekly");
     if (includeStats) response.stats = await getCourierStats(id);
 
     return NextResponse.json(response);
+  });
+
+  return result instanceof NextResponse ? result : result;
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const result = await withAdmin(async () => {
+    const { id } = await params;
+    const body = await request.json();
+    const { is_active } = body;
+
+    if (is_active === undefined) {
+      return NextResponse.json({ error: "Укажите is_active" }, { status: 400 });
+    }
+
+    const admin = createAdminClient();
+    const { error } = await admin
+      .from("couriers")
+      .update({ is_active, updated_at: new Date().toISOString() })
+      .eq("id", id);
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
   });
 
   return result instanceof NextResponse ? result : result;

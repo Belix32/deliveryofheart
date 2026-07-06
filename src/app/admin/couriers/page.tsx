@@ -18,7 +18,6 @@ import {
   RefreshCw,
   Loader2,
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 import type { Courier } from "@/lib/types/courier";
 
 // =====================================================
@@ -39,13 +38,11 @@ function CouriersContent() {
 
   const loadCouriers = async () => {
     setIsRefreshing(true);
-    const { data, error } = await supabase
-      .from("couriers")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const response = await fetch("/api/admin/couriers");
+    const data = await response.json();
 
-    if (!error && data) {
-      setCouriers(data);
+    if (response.ok) {
+      setCouriers(data.couriers || []);
     }
     setLoading(false);
     setIsRefreshing(false);

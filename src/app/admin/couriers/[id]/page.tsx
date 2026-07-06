@@ -21,8 +21,9 @@ import {
   Bike,
   Car,
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 import type { Courier } from "@/lib/types/courier";
+import AdminLoader from "@/components/admin/AdminLoader";
+import AdminModal from "@/components/admin/AdminModal";
 
 // =====================================================
 // TYPES
@@ -40,7 +41,7 @@ interface OrderHistory {
   status: string;
   earnings: number;
   created_at: string;
-  order?: {
+  orders?: {
     order_number: string;
     final_amount: number;
     status: string;
@@ -71,89 +72,19 @@ function CourierDetailPage({ params }: { params: Promise<{ id: string }> }) {
 
   const loadCourierData = async () => {
     setIsRefreshing(true);
-    
-    // Load courier info
-    const { data: courierData } = await supabase
-      .from("couriers")
-      .select("*")
-      .eq("id", resolvedParams.id)
-      .single();
-    
-    if (courierData) {
-      setCourier(courierData);
-      
-      // Load stats
-      const now = new Date();
-      const todayStr = now.toISOString().split("T")[0];
-      const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      const monthAgoStr = monthAgo.toISOString().split("T")[0];
-      
-      const { data: monthStats } = await supabase
-        .from("courier_stats")
-        .select("orders_completed, total_earnings, total_distance_km")
-        .eq("courier_id", resolvedParams.id)
-        .gte("stat_date", monthAgoStr);
-      
-      const aggregateStats = (statsData: any[]) => ({
-        orders_completed: statsData?.reduce((sum, s) => sum + (s.orders_completed || 0), 0) || 0,
-        total_earnings: statsData?.reduce((sum, s) => sum + parseFloat(s.total_earnings || "0"), 0) || 0,
-        total_distance_km: statsData?.reduce((sum, s) => sum + parseFloat(s.total_distance_km || "0"), 0) || 0,
-      });
-      
-      const { data: todayStats } = await supabase
-        .from("courier_stats")
-        .select("orders_completed, total_earnings, total_distance_km")
-        .eq("courier_id", resolvedParams.id)
-        .eq("stat_date", todayStr)
-        .single();
-      
-      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      const weekAgoStr = weekAgo.toISOString().split("T")[0];
-      
-      const { data: weekStats } = await supabase
-        .from("courier_stats")
-        .select("orders_completed, total_earnings, total_distance_km")
-        .eq("courier_id", resolvedParams.id)
-        .gte("stat_date", weekAgoStr);
-      
-      setStats({
-        today: todayStats ? {
-          orders_completed: todayStats.orders_completed || 0,
-          total_earnings: parseFloat(todayStats.total_earnings || "0"),
-          total_distance_km: parseFloat(todayStats.total_distance_km || "0"),
-        } : { orders_completed: 0, total_earnings: 0, total_distance_km: 0 },
-        week: aggregateStats(weekStats || []),
-        month: aggregateStats(monthStats || []),
-      });
-      
-      // Load order history
-      const { data: ordersData } = await supabase
-        .from("courier_orders")
-        .select("*, orders (order_number, final_amount, status, created_at)")
-        .eq("courier_id", resolvedParams.id)
-        .order("created_at", { ascending: false })
-        .limit(20);
-      
-      if (ordersData) {
-        setOrders(ordersData);
-      }
-      
-      // Load earnings for chart (last 7 days)
-      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      const sevenDaysAgoStr = sevenDaysAgo.toISOString().split("T")[0];
-      
-      const { data: earningsData } = await supabase
-        .from("courier_earnings")
-        .select("period_date, amount")
-        .eq("courier_id", resolvedParams.id)
-        .gte("period_date", sevenDaysAgoStr)
-        .order("period_date", { ascending: true });
-      
-      if (earningsData) {
-        setEarnings(earningsData);
-      }
+
+    const response = await fetch(
+      `/api/admin/couriers/${resolvedParams.id}?include_orders=true&include_earnings=true&include_stats=true`
+    );
+    const data = await response.json();
+
+    if (response.ok && data.courier) {
+      setCourier(data.courier);
+      setStats(data.stats || null);
+      setOrders(data.orders || []);
+      setEarnings(data.earnings || []);
     }
-    
+
     setLoading(false);
     setIsRefreshing(false);
   };
@@ -172,14 +103,13 @@ function CourierDetailPage({ params }: { params: Promise<{ id: string }> }) {
 
   const handleBlockCourier = async () => {
     if (!courier) return;
-    
-    const newStatus = courier.is_active ? false : true;
-    
-    await supabase
-      .from("couriers")
-      .update({ is_active: newStatus, updated_at: new Date().toISOString() })
-      .eq("id", courier.id);
-    
+
+    await fetch(`/api/admin/couriers/${courier.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_active: !courier.is_active }),
+    });
+
     setShowBlockModal(false);
     loadCourierData();
   };
@@ -294,11 +224,7 @@ function CourierDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const maxEarnings = Math.max(...chartData.map((d) => d.amount), 1000);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
+    return <AdminLoader />;
   }
 
   if (!courier) {
@@ -573,10 +499,10 @@ function CourierDetailPage({ params }: { params: Promise<{ id: string }> }) {
                     {formatDate(order.created_at)}
                   </td>
                   <td className="p-4 font-medium text-[#2D2A26] dark:text-[#E8E6E3]">
-                    #{order.order?.order_number || order.order_id.slice(0, 8)}
+                    #{order.orders?.order_number || order.order_id.slice(0, 8)}
                   </td>
                   <td className="p-4 text-[#2D2A26] dark:text-[#E8E6E3]">
-                    {formatPrice(order.order?.final_amount || 0)}
+                    {formatPrice(order.orders?.final_amount || 0)}
                   </td>
                   <td className="p-4">
                     <span
@@ -605,41 +531,34 @@ function CourierDetailPage({ params }: { params: Promise<{ id: string }> }) {
         )}
       </div>
 
-      {/* Block Modal */}
-      {showBlockModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/50"
-            onClick={() => setShowBlockModal(false)}
-          />
-          <div className="relative bg-white dark:bg-[#2D2A26] rounded-2xl p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold text-[#2D2A26] dark:text-[#E8E6E3] mb-4">
-              {courier.is_active
-                ? "Заблокировать курьера?"
-                : "Разблокировать курьера?"}
-            </h3>
-            <p className="text-[#2D2A26]/60 dark:text-[#E8E6E3]/60 mb-6">
-              {courier.is_active
-                ? "Курьер не сможет принимать новые заказы."
-                : "Курьер снова сможет принимать заказы."}
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowBlockModal(false)}
-                className="flex-1 px-4 py-2.5 rounded-xl bg-[#F5F3F0] dark:bg-[#3D3A36] text-[#2D2A26] dark:text-[#E8E6E3]"
-              >
-                Отмена
-              </button>
-              <button
-                onClick={handleBlockCourier}
-                className="flex-1 px-4 py-2.5 rounded-xl bg-red-500 text-white"
-              >
-                {courier.is_active ? "Заблокировать" : "Разблокировать"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AdminModal
+        open={showBlockModal}
+        onClose={() => setShowBlockModal(false)}
+        title={courier.is_active ? "Заблокировать курьера?" : "Разблокировать курьера?"}
+        size="sm"
+        footer={
+          <>
+            <button
+              onClick={() => setShowBlockModal(false)}
+              className="flex-1 px-4 py-2.5 rounded-xl bg-[#F5F3F0] dark:bg-[#3D3A36] text-[#2D2A26] dark:text-[#E8E6E3]"
+            >
+              Отмена
+            </button>
+            <button
+              onClick={handleBlockCourier}
+              className="flex-1 px-4 py-2.5 rounded-xl bg-red-500 text-white"
+            >
+              {courier.is_active ? "Заблокировать" : "Разблокировать"}
+            </button>
+          </>
+        }
+      >
+        <p className="text-[#2D2A26]/60 dark:text-[#E8E6E3]/60">
+          {courier.is_active
+            ? "Курьер не сможет принимать новые заказы."
+            : "Курьер снова сможет принимать заказы."}
+        </p>
+      </AdminModal>
     </div>
   );
 }
