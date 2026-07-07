@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { formatPhoneE164, APP_CITY } from "@/lib/config";
+import { normalizePhone } from "@/lib/phone";
+import { APP_CITY } from "@/lib/config";
+
+async function isPhoneTaken(phone: string, excludeUserId?: string): Promise<boolean> {
+  const admin = createAdminClient();
+  let query = admin.from("users").select("id").eq("phone", phone);
+  if (excludeUserId) query = query.neq("id", excludeUserId);
+  const { data } = await query.maybeSingle();
+  return Boolean(data);
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,8 +26,15 @@ export async function POST(request: NextRequest) {
     const admin = createAdminClient();
     const email = authUser.email || `${authUser.id}@users.local`;
     const normalizedPhone = phone
-      ? formatPhoneE164(phone.replace(/\D/g, ""))
-      : authUser.user_metadata?.phone || authUser.phone || null;
+      ? normalizePhone(phone)
+      : normalizePhone(authUser.user_metadata?.phone as string | undefined);
+
+    if (normalizedPhone && (await isPhoneTaken(normalizedPhone, authUser.id))) {
+      return NextResponse.json(
+        { error: "Этот номер телефона уже привязан к другому аккаунту" },
+        { status: 409 }
+      );
+    }
 
     const { data: existing } = await admin
       .from("users")
@@ -57,6 +73,12 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error("[auth/sync-profile]", error);
+      if (error.code === "23505") {
+        return NextResponse.json(
+          { error: "Этот номер телефона уже привязан к другому аккаунту" },
+          { status: 409 }
+        );
+      }
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 

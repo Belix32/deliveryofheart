@@ -22,8 +22,17 @@ function requiresAuth(pathname: string): boolean {
   );
 }
 
+function hasSupabaseAuthCookie(request: NextRequest): boolean {
+  return request.cookies.getAll().some((c) => c.name.includes("-auth-token"));
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  if (isPublicRoute(pathname) && !hasSupabaseAuthCookie(request)) {
+    return NextResponse.next();
+  }
+
   const { supabase, user, supabaseResponse } = await updateSession(request);
 
   if (isPublicRoute(pathname)) {

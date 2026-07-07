@@ -394,7 +394,99 @@ END;
 $$;
 
 -- =============================================================================
--- F. STRICT RLS (production)
+-- F. RLS HELPERS (SECURITY DEFINER — avoid policy recursion)
+-- =============================================================================
+
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM user_roles ur
+    JOIN roles r ON r.id = ur.role_id
+    WHERE ur.user_id = auth.uid()
+      AND ur.is_active = TRUE
+      AND r.name = 'admin'
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_staff_member()
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM user_roles ur
+    JOIN roles r ON r.id = ur.role_id
+    WHERE ur.user_id = auth.uid()
+      AND ur.is_active = TRUE
+      AND r.name IN ('admin', 'courier', 'restaurant_owner', 'restaurant_admin')
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION public.can_view_order_as_staff(p_restaurant_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM user_roles ur
+    JOIN roles r ON r.id = ur.role_id
+    WHERE ur.user_id = auth.uid()
+      AND ur.is_active = TRUE
+      AND (
+        r.name IN ('admin', 'courier')
+        OR (
+          r.name IN ('restaurant_owner', 'restaurant_admin')
+          AND ur.restaurant_id = p_restaurant_id
+        )
+      )
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION public.can_update_order_as_staff(
+  p_restaurant_id UUID,
+  p_courier_id UUID
+)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM user_roles ur
+    JOIN roles r ON r.id = ur.role_id
+    WHERE ur.user_id = auth.uid()
+      AND ur.is_active = TRUE
+      AND (
+        r.name = 'admin'
+        OR (
+          r.name IN ('restaurant_owner', 'restaurant_admin')
+          AND ur.restaurant_id = p_restaurant_id
+        )
+        OR (
+          r.name = 'courier'
+          AND p_courier_id IS NOT NULL
+          AND p_courier_id IN (SELECT c.id FROM couriers c WHERE c.user_id = auth.uid())
+        )
+      )
+  );
+$$;
+
+-- =============================================================================
+-- G. STRICT RLS (production)
 -- =============================================================================
 
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
@@ -424,13 +516,7 @@ CREATE POLICY "orders_select_own" ON public.orders FOR SELECT USING (auth.uid() 
 
 DROP POLICY IF EXISTS "orders_select_staff" ON public.orders;
 CREATE POLICY "orders_select_staff" ON public.orders FOR SELECT USING (
-  EXISTS (
-    SELECT 1 FROM public.user_roles ur
-    JOIN public.roles r ON r.id = ur.role_id
-    WHERE ur.user_id = auth.uid() AND ur.is_active = TRUE
-      AND (r.name IN ('admin', 'courier')
-        OR (r.name IN ('restaurant_owner', 'restaurant_admin') AND ur.restaurant_id = orders.restaurant_id))
-  )
+  public.can_view_order_as_staff(restaurant_id)
 );
 
 DROP POLICY IF EXISTS "orders_insert_own" ON public.orders;
@@ -439,14 +525,7 @@ CREATE POLICY "orders_insert_own" ON public.orders FOR INSERT WITH CHECK (auth.u
 DROP POLICY IF EXISTS "orders_update_staff" ON public.orders;
 CREATE POLICY "orders_update_staff" ON public.orders FOR UPDATE USING (
   auth.uid() = user_id
-  OR EXISTS (
-    SELECT 1 FROM public.user_roles ur
-    JOIN public.roles r ON r.id = ur.role_id
-    WHERE ur.user_id = auth.uid() AND ur.is_active = TRUE
-      AND (r.name = 'admin'
-        OR (r.name IN ('restaurant_owner', 'restaurant_admin') AND ur.restaurant_id = orders.restaurant_id)
-        OR (r.name = 'courier' AND orders.courier_id IN (SELECT c.id FROM public.couriers c WHERE c.user_id = auth.uid())))
-  )
+  OR public.can_update_order_as_staff(restaurant_id, courier_id)
 );
 
 -- addresses
@@ -465,13 +544,7 @@ CREATE POLICY "order_items_select" ON public.order_items FOR SELECT USING (
   EXISTS (
     SELECT 1 FROM public.orders o
     WHERE o.id = order_items.order_id
-      AND (o.user_id = auth.uid()
-        OR EXISTS (
-          SELECT 1 FROM public.user_roles ur
-          JOIN public.roles r ON r.id = ur.role_id
-          WHERE ur.user_id = auth.uid() AND ur.is_active = TRUE
-            AND r.name IN ('admin', 'courier', 'restaurant_owner', 'restaurant_admin')
-        ))
+      AND (o.user_id = auth.uid() OR public.is_staff_member())
   )
 );
 
@@ -485,11 +558,7 @@ DROP POLICY IF EXISTS "user_roles_select_own" ON public.user_roles;
 CREATE POLICY "user_roles_select_own" ON public.user_roles FOR SELECT USING (auth.uid() = user_id);
 DROP POLICY IF EXISTS "user_roles_select_admin" ON public.user_roles;
 CREATE POLICY "user_roles_select_admin" ON public.user_roles FOR SELECT USING (
-  EXISTS (
-    SELECT 1 FROM public.user_roles ur
-    JOIN public.roles r ON r.id = ur.role_id
-    WHERE ur.user_id = auth.uid() AND ur.is_active = TRUE AND r.name = 'admin'
-  )
+  public.is_admin()
 );
 
 -- catalog
@@ -516,13 +585,7 @@ CREATE POLICY "order_status_history_insert" ON public.order_status_history FOR I
     EXISTS (
       SELECT 1 FROM public.orders o
       WHERE o.id = order_status_history.order_id
-        AND (o.user_id = auth.uid()
-          OR EXISTS (
-            SELECT 1 FROM public.user_roles ur
-            JOIN public.roles r ON r.id = ur.role_id
-            WHERE ur.user_id = auth.uid() AND ur.is_active = TRUE
-              AND r.name IN ('admin', 'courier', 'restaurant_owner', 'restaurant_admin')
-          ))
+        AND (o.user_id = auth.uid() OR public.is_staff_member())
     )
   );
 
@@ -531,13 +594,7 @@ CREATE POLICY "order_status_history_select" ON public.order_status_history FOR S
   EXISTS (
     SELECT 1 FROM public.orders o
     WHERE o.id = order_status_history.order_id
-      AND (o.user_id = auth.uid()
-        OR EXISTS (
-          SELECT 1 FROM public.user_roles ur
-          JOIN public.roles r ON r.id = ur.role_id
-          WHERE ur.user_id = auth.uid() AND ur.is_active = TRUE
-            AND r.name IN ('admin', 'courier', 'restaurant_owner', 'restaurant_admin')
-        ))
+      AND (o.user_id = auth.uid() OR public.is_staff_member())
   )
 );
 

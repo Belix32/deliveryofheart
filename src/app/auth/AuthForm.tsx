@@ -33,13 +33,17 @@ export default function AuthForm() {
 
   const handleLogin = async () => {
     setError("");
-    if (!email.trim() || !password) {
-      setError("Введите email и пароль");
+    if (!phone.trim()) {
+      setError("Введите номер телефона");
+      return;
+    }
+    if (!password) {
+      setError("Введите пароль");
       return;
     }
 
     setSubmitting(true);
-    const result = await signIn(email, password);
+    const result = await signIn(phone, password);
     if (result.success) {
       goHome();
     } else {
@@ -58,6 +62,10 @@ export default function AuthForm() {
       setError("Введите email");
       return;
     }
+    if (!phone.trim()) {
+      setError("Введите номер телефона");
+      return;
+    }
     if (password.length < 6) {
       setError("Пароль должен быть не короче 6 символов");
       return;
@@ -68,7 +76,7 @@ export default function AuthForm() {
       email,
       password,
       name,
-      phone: phone.trim() || undefined,
+      phone: phone.trim(),
     });
     if (result.success) {
       goHome();
@@ -120,16 +128,33 @@ export default function AuthForm() {
             </div>
           )}
 
+          {mode === "register" && (
+            <div>
+              <label className="block text-sm font-medium mb-2">Email</label>
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#2D2A26]/40" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  className="w-full pl-12 pr-4 py-4 rounded-xl bg-[#F5F3F0] dark:bg-[#3D3A36] outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+            </div>
+          )}
+
           <div>
-            <label className="block text-sm font-medium mb-2">Email</label>
+            <label className="block text-sm font-medium mb-2">Телефон</label>
             <div className="relative">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#2D2A26]/40" />
+              <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#2D2A26]/40" />
               <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                autoComplete="email"
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+7 (999) 123-45-67"
+                autoComplete={mode === "login" ? "tel" : "tel"}
                 className="w-full pl-12 pr-4 py-4 rounded-xl bg-[#F5F3F0] dark:bg-[#3D3A36] outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
@@ -143,30 +168,12 @@ export default function AuthForm() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Минимум 6 символов"
+                placeholder={mode === "login" ? "Ваш пароль" : "Минимум 6 символов"}
                 autoComplete={mode === "login" ? "current-password" : "new-password"}
                 className="w-full pl-12 pr-4 py-4 rounded-xl bg-[#F5F3F0] dark:bg-[#3D3A36] outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
           </div>
-
-          {mode === "register" && (
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                Телефон <span className="text-[#2D2A26]/40">(для курьера, необязательно)</span>
-              </label>
-              <div className="relative">
-                <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#2D2A26]/40" />
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+7 (999) 123-45-67"
-                  className="w-full pl-12 pr-4 py-4 rounded-xl bg-[#F5F3F0] dark:bg-[#3D3A36] outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
-            </div>
-          )}
 
           {error && (
             <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-xl text-sm">
