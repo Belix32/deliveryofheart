@@ -9,6 +9,7 @@ import React, {
   useMemo,
 } from "react";
 import { createClient } from "@/lib/supabase/browser";
+import { normalizePhone } from "@/lib/phone";
 import type { UserProfile } from "@/lib/database.types";
 import type { User } from "@supabase/supabase-js";
 
@@ -28,7 +29,7 @@ interface AuthContextType {
   user: UserProfile | null;
   authUser: User | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<AuthResult>;
+  signIn: (phone: string, password: string) => Promise<AuthResult>;
   signUp: (input: SignUpInput) => Promise<AuthResult>;
   signOut: () => Promise<void>;
 }
@@ -40,19 +41,35 @@ async function syncProfile(
   data?: { full_name?: string; phone?: string }
 ) {
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session?.user) return null;
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
 
   const response = await fetch("/api/auth/sync-profile", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify(data ?? {}),
   });
 
   if (!response.ok) return null;
   const { profile } = await response.json();
   return profile as UserProfile;
+}
+
+async function loadProfile(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  syncData?: { full_name?: string; phone?: string }
+) {
+  const { data: profile } = await supabase
+    .from("users")
+    .select("*")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (profile) return profile as UserProfile;
+  return syncProfile(supabase, syncData);
 }
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -70,18 +87,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setAuthUser(sessionUser);
 
       if (sessionUser) {
-        const { data: profile } = await supabase
-          .from("users")
-          .select("*")
-          .eq("id", sessionUser.id)
-          .single();
-
-        if (profile) {
-          setUser(profile);
-        } else {
-          const synced = await syncProfile(supabase);
-          setUser(synced);
-        }
+        const profile = await loadProfile(supabase, sessionUser.id);
+        if (profile) setUser(profile);
       }
 
       setLoading(false);
@@ -94,12 +101,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setAuthUser(session?.user ?? null);
       if (session?.user) {
-        const { data: profile } = await supabase
-          .from("users")
-          .select("*")
-          .eq("id", session.user.id)
-          .single();
-        setUser(profile ?? null);
+        const profile = await loadProfile(supabase, session.user.id);
+        setUser(profile);
       } else {
         setUser(null);
       }
@@ -108,19 +111,33 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => subscription.unsubscribe();
   }, [supabase]);
 
-  const signIn = async (email: string, password: string): Promise<AuthResult> => {
+  const signIn = async (phone: string, password: string): Promise<AuthResult> => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password,
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ phone, password }),
       });
 
-      if (error) {
-        return { success: false, error: error.message };
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: result.error || "Неверный телефон или пароль",
+        };
       }
 
-      const profile = await syncProfile(supabase);
-      if (profile) setUser(profile);
+      const {
+        data: { user: sessionUser },
+      } = await supabase.auth.getUser();
+
+      if (sessionUser) {
+        setAuthUser(sessionUser);
+        const profile = await loadProfile(supabase, sessionUser.id);
+        if (profile) setUser(profile);
+      }
 
       return { success: true };
     } catch (e: unknown) {
@@ -131,13 +148,31 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const signUp = async ({ email, password, name, phone }: SignUpInput): Promise<AuthResult> => {
     try {
+      const normalizedPhone = phone ? normalizePhone(phone) : null;
+      if (!normalizedPhone) {
+        return { success: false, error: "Введите корректный номер телефона" };
+      }
+
+      const phoneCheck = await fetch("/api/auth/check-phone", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: normalizedPhone }),
+      });
+      const phoneResult = await phoneCheck.json();
+      if (!phoneCheck.ok || !phoneResult.available) {
+        return {
+          success: false,
+          error: phoneResult.error || "Этот номер телефона уже зарегистрирован",
+        };
+      }
+
       const { data, error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
         options: {
           data: {
             full_name: name.trim(),
-            phone: phone || null,
+            phone: normalizedPhone,
           },
         },
       });
@@ -154,9 +189,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
       }
 
-      const profile = await syncProfile(supabase, {
+      setAuthUser(data.session.user);
+
+      const profile = await loadProfile(supabase, data.session.user.id, {
         full_name: name.trim(),
-        phone,
+        phone: normalizedPhone,
       });
       if (profile) setUser(profile);
 

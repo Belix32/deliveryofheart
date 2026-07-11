@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { getCourierProfileById } from "@/lib/api/couriers";
+import { fetchCourierProfile } from "@/lib/courier-client";
 import { useAuth } from "@/context/AuthContext";
 import type { Courier } from "@/lib/types/courier";
 import BottomNav from "@/components/courier/BottomNav";
@@ -16,7 +16,7 @@ const vehicleLabels = {
 };
 
 export default function ProfilePage() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const [profile, setProfile] = useState<Courier | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +28,7 @@ export default function ProfilePage() {
       
       try {
         setError(null);
-        const data = await getCourierProfileById(user.id);
+        const data = await fetchCourierProfile();
         
         if (!data) {
           setError("Профиль не найден");
@@ -205,7 +205,11 @@ export default function ProfilePage() {
             <ChevronRight className="w-4 h-4 text-neutral-500" />
           </Link>
           
-          <button className="w-full flex items-center gap-3 p-3 rounded-xl bg-[#1A1918] border border-red-500/30 hover:border-red-500/50 transition-colors">
+          <button
+            type="button"
+            onClick={() => signOut()}
+            className="w-full flex items-center gap-3 p-3 rounded-xl bg-[#1A1918] border border-red-500/30 hover:border-red-500/50 transition-colors"
+          >
             <LogOut className="w-5 h-5 text-red-400" />
             <span className="text-red-400 flex-1">Выйти</span>
           </button>

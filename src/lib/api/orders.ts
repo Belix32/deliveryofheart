@@ -1,4 +1,10 @@
+import "server-only";
+
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  canTransitionOrderStatus,
+  isValidOrderStatus,
+} from "@/lib/order-transitions";
 
 function db() {
   return createAdminClient();
@@ -64,28 +70,33 @@ export async function updateOrderStatus(
   orderId: string,
   status: string,
   note?: string,
-  changedBy?: string
+  changedBy?: string,
+  role: "customer" | "restaurant" | "admin" | "courier" = "restaurant"
 ): Promise<boolean> {
-  console.log('[orders.api] updateOrderStatus called:', { orderId, status, note, changedBy });
 
-  // Проверяем валидность статуса
-  const validStatuses = [
-    'pending',
-    'confirmed',
-    'preparing',
-    'ready',
-    'waiting_courier',
-    'in_delivery',
-    'delivered',
-    'cancelled'
-  ];
-
-  if (!validStatuses.includes(status)) {
+  if (!isValidOrderStatus(status)) {
     console.error('[orders.api] Неверный статус:', status);
     return false;
   }
 
-  // Обновляем заказ
+  const { data: current, error: fetchError } = await db()
+    .from('orders')
+    .select('status')
+    .eq('id', orderId)
+    .single();
+
+  if (fetchError || !current) {
+    console.error('[orders.api] Заказ не найден:', fetchError);
+    return false;
+  }
+
+  const fromStatus = current.status === 'delivering' ? 'in_delivery' : current.status;
+
+  if (!canTransitionOrderStatus(fromStatus, status, role)) {
+    console.error('[orders.api] Недопустимый переход:', fromStatus, '->', status);
+    return false;
+  }
+
   const { error: updateError } = await db()
     .from('orders')
     .update({
@@ -115,7 +126,6 @@ export async function updateOrderStatus(
     // Продолжаем, даже если не удалось записать историю
   }
 
-  console.log('[orders.api] Статус заказа успешно обновлён');
   return true;
 }
 
@@ -129,7 +139,6 @@ export async function getRestaurantOrders(
   restaurantId: string,
   status?: string
 ): Promise<RestaurantOrder[]> {
-  console.log('[orders.api] getRestaurantOrders called:', { restaurantId, status });
 
   let query = db()
     .from('orders')
@@ -152,7 +161,6 @@ export async function getRestaurantOrders(
     return [];
   }
 
-  console.log('[orders.api] Получено заказов:', data?.length || 0);
   return data || [];
 }
 
@@ -162,7 +170,6 @@ export async function getRestaurantOrders(
  * @returns Массив записей истории
  */
 export async function getOrderHistory(orderId: string): Promise<StatusHistory[]> {
-  console.log('[orders.api] getOrderHistory called:', orderId);
 
   const { data, error } = await db()
     .from('order_status_history')
@@ -188,7 +195,6 @@ export async function checkRestaurantOrderAccess(
   userId: string,
   restaurantId: string
 ): Promise<boolean> {
-  console.log('[orders.api] checkRestaurantOrderAccess called:', { userId, restaurantId });
 
   const { data: userRoles, error } = await db()
     .from('user_roles')
@@ -207,7 +213,6 @@ export async function checkRestaurantOrderAccess(
     (ur: any) => ur.roles?.name === 'restaurant_owner' || ur.roles?.name === 'restaurant_admin'
   );
 
-  console.log('[orders.api] Проверка прав:', hasAccess ? 'доступ разрешён' : 'доступ запрещён');
   return hasAccess || false;
 }
 
@@ -217,7 +222,6 @@ export async function checkRestaurantOrderAccess(
  * @returns true если пользователь админ
  */
 export async function checkIsAdmin(userId: string): Promise<boolean> {
-  console.log('[orders.api] checkIsAdmin called:', userId);
 
   const { data: userRoles, error } = await db()
     .from('user_roles')
@@ -240,20 +244,22 @@ export async function checkIsAdmin(userId: string): Promise<boolean> {
  * @returns ID ресторана или null
  */
 export async function getUserRestaurantId(userId: string): Promise<string | null> {
-  console.log('[orders.api] getUserRestaurantId called:', userId);
 
   const { data: userRoles, error } = await db()
     .from('user_roles')
-    .select('restaurant_id')
+    .select('restaurant_id, roles(name)')
     .eq('user_id', userId)
-    .eq('is_active', true)
-    .in('role_name', ['restaurant_owner', 'restaurant_admin'])
-    .single();
+    .eq('is_active', true);
 
   if (error) {
     console.error('[orders.api] Ошибка получения restaurant_id:', error);
     return null;
   }
 
-  return userRoles?.restaurant_id || null;
+  const match = userRoles?.find((ur: { roles?: { name?: string } | { name?: string }[] }) => {
+    const roleName = Array.isArray(ur.roles) ? ur.roles[0]?.name : ur.roles?.name;
+    return roleName === 'restaurant_owner' || roleName === 'restaurant_admin';
+  });
+
+  return match?.restaurant_id || null;
 }

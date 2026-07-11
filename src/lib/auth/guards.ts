@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { isPlatformAdmin } from "@/lib/auth/admin-access";
 import { getUserRoles } from "@/lib/auth/check-role";
 
 export async function requireAuth() {
@@ -17,9 +18,8 @@ export async function requireAuth() {
 
 export async function requireAdmin() {
   const user = await requireAuth();
-  const roles = await getUserRoles(user.id);
 
-  if (!roles.includes("admin")) {
+  if (!(await isPlatformAdmin(user.id))) {
     redirect("/");
   }
 

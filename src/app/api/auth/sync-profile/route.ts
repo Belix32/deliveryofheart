@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { formatPhoneE164, APP_CITY } from "@/lib/config";
+import { normalizePhone } from "@/lib/phone";
+
+async function isPhoneTaken(phone: string, excludeUserId?: string): Promise<boolean> {
+  const admin = createAdminClient();
+  let query = admin.from("users").select("id").eq("phone", phone);
+  if (excludeUserId) query = query.neq("id", excludeUserId);
+  const { data } = await query.maybeSingle();
+  return Boolean(data);
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,14 +19,22 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const fullName = body.full_name as string | undefined;
-    const phone = body.phone as string | undefined;
+    const fullName =
+      typeof body.full_name === "string" ? body.full_name.trim().slice(0, 120) : undefined;
+    const phone = typeof body.phone === "string" ? body.phone : undefined;
+
+    // Only trust explicit request body for phone — never JWT user_metadata.
+    const normalizedPhone = phone ? normalizePhone(phone) : null;
 
     const admin = createAdminClient();
     const email = authUser.email || `${authUser.id}@users.local`;
-    const normalizedPhone = phone
-      ? formatPhoneE164(phone.replace(/\D/g, ""))
-      : authUser.user_metadata?.phone || authUser.phone || null;
+
+    if (normalizedPhone && (await isPhoneTaken(normalizedPhone, authUser.id))) {
+      return NextResponse.json(
+        { error: "Этот номер телефона уже привязан к другому аккаунту" },
+        { status: 409 }
+      );
+    }
 
     const { data: existing } = await admin
       .from("users")
@@ -50,13 +66,19 @@ export async function POST(request: NextRequest) {
         id: authUser.id,
         email,
         phone: normalizedPhone,
-        full_name: fullName || authUser.user_metadata?.full_name || null,
+        full_name: fullName || null,
       })
       .select()
       .single();
 
     if (error) {
       console.error("[auth/sync-profile]", error);
+      if (error.code === "23505") {
+        return NextResponse.json(
+          { error: "Этот номер телефона уже привязан к другому аккаунту" },
+          { status: 409 }
+        );
+      }
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
@@ -76,9 +98,6 @@ export async function POST(request: NextRequest) {
         { onConflict: "user_id,role_id,restaurant_id" }
       );
     }
-
-    // Ensure courier profile uses app city if created later
-    void APP_CITY;
 
     return NextResponse.json({ profile });
   } catch (error) {

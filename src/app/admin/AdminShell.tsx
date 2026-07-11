@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -15,6 +15,15 @@ import {
   Sun,
   ChevronRight,
   Bike,
+  Star,
+  CreditCard,
+  UserCog,
+  Image,
+  FolderTree,
+  Map,
+  BarChart3,
+  Bell,
+  ScrollText,
 } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
 
@@ -24,15 +33,34 @@ const menuItems = [
   { icon: Bike, label: "Курьеры", href: "/admin/couriers" },
   { icon: Store, label: "Рестораны", href: "/admin/restaurants" },
   { icon: Users, label: "Пользователи", href: "/admin/users" },
+  { icon: UserCog, label: "Админы ресторанов", href: "/admin/restaurant-admins" },
   { icon: Tag, label: "Промокоды", href: "/admin/coupons" },
+  { icon: Image, label: "Баннеры", href: "/admin/banners" },
+  { icon: FolderTree, label: "Категории", href: "/admin/categories-global" },
+  { icon: Star, label: "Отзывы", href: "/admin/reviews" },
   { icon: MapPin, label: "Города", href: "/admin/cities" },
+  { icon: Map, label: "Зоны доставки", href: "/admin/delivery-zones" },
+  { icon: CreditCard, label: "Платежи", href: "/admin/payments" },
+  { icon: BarChart3, label: "Аналитика", href: "/admin/analytics" },
+  { icon: Bell, label: "Уведомления", href: "/admin/notifications" },
   { icon: Settings, label: "Настройки", href: "/admin/settings" },
+  { icon: ScrollText, label: "Логи", href: "/admin/logs" },
 ];
 
 export default function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { isDark, toggleTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    document.documentElement.classList.add("dark");
+    return () => {
+      const saved = localStorage.getItem("theme");
+      if (saved !== "dark") {
+        document.documentElement.classList.remove("dark");
+      }
+    };
+  }, []);
 
   return (
     <div className="flex min-h-screen bg-[#0a0a0a]">

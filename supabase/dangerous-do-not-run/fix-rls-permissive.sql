@@ -1,3 +1,6 @@
+-- !!! DANGEROUS — DO NOT RUN IN PRODUCTION (opens RLS) !!!
+-- See README.md in this folder.
+
 -- PERMISSIVE FIX - Run this in Supabase SQL Editor
 -- This completely opens INSERT for orders, addresses, and order_items
 

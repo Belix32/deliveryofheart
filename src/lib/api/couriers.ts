@@ -1,3 +1,5 @@
+import "server-only";
+
 import { createAdminClient } from "@/lib/supabase/admin";
 import { APP_CITY } from "@/lib/config";
 import type { Courier, CourierOrder, CourierEarnings, CourierStatsSummary } from "@/lib/types/courier";
@@ -14,7 +16,6 @@ function db() {
  * Получить профиль текущего курьера по user_id
  */
 export async function getCourierProfile(userId: string): Promise<Courier | null> {
-  console.log('[couriers.api] getCourierProfile called with userId:', userId);
   
   const { data, error } = await db()
     .from('couriers')
@@ -34,7 +35,6 @@ export async function getCourierProfile(userId: string): Promise<Courier | null>
  * Получить профиль курьера по courier_id
  */
 export async function getCourierProfileById(courierId: string): Promise<Courier | null> {
-  console.log('[couriers.api] getCourierProfileById called with courierId:', courierId);
   
   const { data, error } = await db()
     .from('couriers')
@@ -50,6 +50,24 @@ export async function getCourierProfileById(courierId: string): Promise<Courier 
   return data;
 }
 
+const COURIER_PROFILE_FIELDS = [
+  "name",
+  "phone",
+  "vehicle_type",
+  "current_city",
+  "avatar_url",
+] as const;
+
+function pickCourierProfileFields(data: Partial<Courier>): Partial<Courier> {
+  const picked: Partial<Courier> = {};
+  for (const key of COURIER_PROFILE_FIELDS) {
+    if (data[key] !== undefined) {
+      (picked as Record<string, unknown>)[key] = data[key];
+    }
+  }
+  return picked;
+}
+
 /**
  * Создать/обновить профиль курьера
  */
@@ -57,8 +75,9 @@ export async function upsertCourierProfile(
   userId: string,
   data: Partial<Courier>
 ): Promise<Courier | null> {
-  console.log('[couriers.api] upsertCourierProfile called with userId:', userId, 'data:', data);
   
+  const safeFields = pickCourierProfileFields(data);
+
   // Check if profile exists
   const { data: existing } = await db()
     .from('couriers')
@@ -68,8 +87,8 @@ export async function upsertCourierProfile(
   
   const profileData = {
     user_id: userId,
-    current_city: data.current_city || APP_CITY,
-    ...data,
+    current_city: safeFields.current_city || APP_CITY,
+    ...safeFields,
     updated_at: new Date().toISOString(),
   };
   
@@ -109,7 +128,6 @@ export async function setCourierStatus(
   courierId: string,
   status: 'online' | 'offline' | 'busy'
 ): Promise<boolean> {
-  console.log('[couriers.api] setCourierStatus called with courierId:', courierId, 'status:', status);
   
   const { error } = await db()
     .from('couriers')
@@ -135,16 +153,15 @@ export async function setCourierStatus(
  * Получить доступные заказы для курьера в городе
  */
 export async function getAvailableOrders(city: string): Promise<any[]> {
-  console.log('[couriers.api] getAvailableOrders called with city:', city);
   
-  // Get orders without courier assignment that are ready for delivery
+  // Orders ready for courier pickup
   const { data, error } = await db()
     .from('orders')
     .select(`
       *,
       restaurants (name, address, phone)
     `)
-    .eq('status', 'ready') // Заказ готов к доставке
+    .in('status', ['waiting_courier'])
     .is('courier_id', null)
     .eq('delivery_city', city)
     .order('created_at', { ascending: false })
@@ -162,7 +179,6 @@ export async function getAvailableOrders(city: string): Promise<any[]> {
  * Получить все заказы (независимо от статуса) для курьера
  */
 export async function getOrdersForCourier(courierId: string): Promise<any[]> {
-  console.log('[couriers.api] getOrdersForCourier called with courierId:', courierId);
   
   // Get order_ids assigned to this courier
   const { data: courierOrders } = await db()
@@ -194,65 +210,68 @@ export async function getOrdersForCourier(courierId: string): Promise<any[]> {
 }
 
 /**
- * Принять заказ
+ * Принять заказ (только waiting_courier в городе курьера)
  */
-export async function acceptOrder(orderId: string, courierId: string): Promise<boolean> {
-  console.log('[couriers.api] acceptOrder called with orderId:', orderId, 'courierId:', courierId);
-  
-  // Check if order is available
-  const { data: order } = await db()
+export async function acceptOrder(
+  orderId: string,
+  courierId: string,
+  deliveryCity: string
+): Promise<boolean> {
+  const admin = db();
+  const city = deliveryCity?.trim() || APP_CITY;
+
+  const { data: claimed, error: claimError } = await admin
     .from('orders')
-    .select('id, status, courier_id')
+    .update({
+      courier_id: courierId,
+      status: 'in_delivery',
+      updated_at: new Date().toISOString(),
+      status_updated_at: new Date().toISOString(),
+    })
     .eq('id', orderId)
-    .single();
-  
-  if (!order) {
-    console.error('[couriers.api] acceptOrder: order not found');
+    .eq('status', 'waiting_courier')
+    .eq('delivery_city', city)
+    .is('courier_id', null)
+    .select('id')
+    .maybeSingle();
+
+  if (claimError || !claimed) {
+    console.error('[couriers.api] acceptOrder: order unavailable or already claimed');
     return false;
   }
-  
-  if (order.status !== 'ready' && order.status !== 'confirmed') {
-    console.error('[couriers.api] acceptOrder: order not ready for delivery, status:', order.status);
-    return false;
-  }
-  
-  if (order.courier_id) {
-    console.error('[couriers.api] acceptOrder: order already has courier');
-    return false;
-  }
-  
-  // Create courier_order record
-  const { error: insertError } = await db()
+
+  const { error: insertError } = await admin
     .from('courier_orders')
     .insert({
       courier_id: courierId,
       order_id: orderId,
       status: 'assigned',
     });
-  
+
   if (insertError) {
     console.error('[couriers.api] acceptOrder insert error:', insertError);
+    await admin
+      .from('orders')
+      .update({
+        courier_id: null,
+        status: 'waiting_courier',
+        updated_at: new Date().toISOString(),
+        status_updated_at: new Date().toISOString(),
+      })
+      .eq('id', orderId)
+      .eq('courier_id', courierId);
     return false;
   }
-  
-  // Update order with courier
-  const { error: updateError } = await db()
-    .from('orders')
-    .update({ 
-      courier_id: courierId,
-      status: 'in_delivery',
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', orderId);
-  
-  if (updateError) {
-    console.error('[couriers.api] acceptOrder update error:', updateError);
-    return false;
-  }
-  
-  // Update courier status to busy
+
+  await admin.from('order_status_history').insert({
+    order_id: orderId,
+    status: 'in_delivery',
+    changed_by: courierId,
+    note: 'Курьер принял заказ',
+  });
+
   await setCourierStatus(courierId, 'busy');
-  
+
   return true;
 }
 
@@ -264,7 +283,6 @@ export async function updateOrderStatus(
   courierId: string,
   status: 'accepted' | 'picked_up' | 'in_delivery' | 'delivered' | 'cancelled' | 'failed'
 ): Promise<boolean> {
-  console.log('[couriers.api] updateOrderStatus called with orderId:', orderId, 'status:', status);
   
   // Find courier_order
   const { data: courierOrder } = await db()
@@ -302,20 +320,25 @@ export async function updateOrderStatus(
   }
   
   // Update main order status
-  let orderStatus = status;
-  if (status === 'delivered') {
-    orderStatus = 'delivered';
-  } else if (status === 'cancelled' || status === 'failed') {
-    orderStatus = 'cancelled';
+  let orderStatus: string | null = null;
+  if (status === "delivered") {
+    orderStatus = "delivered";
+  } else if (status === "cancelled" || status === "failed") {
+    orderStatus = "cancelled";
+  } else if (["accepted", "picked_up", "in_delivery"].includes(status)) {
+    orderStatus = "in_delivery";
   }
-  
-  await db()
-    .from('orders')
-    .update({ 
-      status: orderStatus,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', orderId);
+
+  if (orderStatus) {
+    await db()
+      .from("orders")
+      .update({
+        status: orderStatus,
+        updated_at: new Date().toISOString(),
+        status_updated_at: new Date().toISOString(),
+      })
+      .eq("id", orderId);
+  }
   
   // If delivered, set courier back to online
   if (status === 'delivered') {
@@ -336,7 +359,6 @@ export async function getCourierOrders(
   courierId: string,
   status?: string
 ): Promise<CourierOrder[]> {
-  console.log('[couriers.api] getCourierOrders called with courierId:', courierId, 'status:', status);
   
   let query = db()
     .from('courier_orders')
@@ -371,7 +393,6 @@ export async function getCourierEarnings(
   courierId: string,
   period: 'daily' | 'weekly' | 'monthly' = 'daily'
 ): Promise<CourierEarnings[]> {
-  console.log('[couriers.api] getCourierEarnings called with courierId:', courierId, 'period:', period);
   
   let startDate: string;
   const now = new Date();
@@ -409,7 +430,6 @@ export async function getCourierEarnings(
  * Получить статистику курьера
  */
 export async function getCourierStats(courierId: string): Promise<CourierStatsSummary> {
-  console.log('[couriers.api] getCourierStats called with courierId:', courierId);
   
   const now = new Date();
   const todayStr = now.toISOString().split('T')[0];
@@ -471,7 +491,6 @@ export async function getAllCouriers(filters?: {
   city?: string;
   isActive?: boolean;
 }): Promise<Courier[]> {
-  console.log('[couriers.api] getAllCouriers called with filters:', filters);
   
   let query = db()
     .from('couriers')

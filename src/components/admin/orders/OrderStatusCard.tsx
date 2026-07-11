@@ -47,6 +47,8 @@ export function OrderStatusCard({
       confirmed: CheckCircle,
       preparing: Package,
       ready: CheckCircle,
+      waiting_courier: Truck,
+      in_delivery: Truck,
       delivering: Truck,
       delivered: Home,
       cancelled: XCircle,
@@ -60,7 +62,9 @@ export function OrderStatusCard({
       confirmed: "Подтверждён",
       preparing: "Готовится",
       ready: "Готов",
-      delivering: "В пути",
+      waiting_courier: "Ждёт курьера",
+      in_delivery: "В доставке",
+      delivering: "В доставке",
       delivered: "Доставлен",
       cancelled: "Отменён",
     };
@@ -73,6 +77,8 @@ export function OrderStatusCard({
       confirmed: "bg-blue-500/20 text-blue-500",
       preparing: "bg-orange-500/20 text-orange-500",
       ready: "bg-green-500/20 text-green-500",
+      waiting_courier: "bg-purple-500/20 text-purple-500",
+      in_delivery: "bg-purple-500/20 text-purple-500",
       delivering: "bg-purple-500/20 text-purple-500",
       delivered: "bg-green-500/20 text-green-500",
       cancelled: "bg-red-500/20 text-red-500",
@@ -103,8 +109,8 @@ export function OrderStatusCard({
       pending: "confirmed",
       confirmed: "preparing",
       preparing: "ready",
-      ready: "delivering",
-      delivering: "delivered",
+      ready: "waiting_courier",
+      in_delivery: "delivered",
     };
     return nextSteps[status];
   };
@@ -115,9 +121,9 @@ export function OrderStatusCard({
     const labels: Record<string, string> = {
       confirmed: "Подтвердить",
       preparing: "Готовить",
-      ready: "Готов",
-      delivering: "В доставку",
-      delivered: "Доставлен",
+      ready: "Ждёт курьера",
+      waiting_courier: "Ждёт курьера",
+      in_delivery: "Доставлен",
     };
     return labels[status];
   };

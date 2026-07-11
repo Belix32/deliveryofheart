@@ -19,7 +19,8 @@ import {
 } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
-import { supabase, fetchUserOrders, fetchAddresses, Order, Address } from "@/lib/supabase";
+import { supabase, fetchUserOrders, fetchAddresses, fetchFavorites, Order, Address, Restaurant } from "@/lib/supabase";
+import { getStatusLabel } from "@/lib/order-status";
 import OrderTracker from "@/components/OrderTracker";
 
 const ProfilePage: React.FC = () => {
@@ -29,6 +30,7 @@ const ProfilePage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"orders" | "favorites" | "addresses" | "settings">("orders");
   const [orders, setOrders] = useState<Order[]>([]);
   const [addresses, setAddresses] = useState<Address[]>([]);
+  const [favorites, setFavorites] = useState<Restaurant[]>([]);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [userName, setUserName] = useState<string>("Гость");
@@ -56,6 +58,9 @@ const ProfilePage: React.FC = () => {
       // Загружаем адреса
       const userAddresses = await fetchAddresses(user.id);
       setAddresses(userAddresses);
+
+      const favRestaurants = await fetchFavorites(user.id);
+      setFavorites((favRestaurants as Restaurant[]).filter(Boolean));
     } else {
       // Не авторизован - показываем пустой профиль гостя
       setUserId(null);
@@ -67,18 +72,7 @@ const ProfilePage: React.FC = () => {
     setLoading(false);
   };
 
-  const getStatusLabel = (status: string) => {
-    const labels: Record<string, string> = {
-      pending: "Новый",
-      confirmed: "Подтверждён",
-      preparing: "Готовится",
-      ready: "Готов",
-      delivering: "В пути",
-      delivered: "Доставлен",
-      cancelled: "Отменён",
-    };
-    return labels[status] || status;
-  };
+  const getStatusLabelLocal = (status: string) => getStatusLabel(status);
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
@@ -86,6 +80,8 @@ const ProfilePage: React.FC = () => {
       confirmed: "bg-blue-100 text-blue-800",
       preparing: "bg-orange-100 text-orange-800",
       ready: "bg-green-100 text-green-800",
+      waiting_courier: "bg-purple-100 text-purple-800",
+      in_delivery: "bg-purple-100 text-purple-800",
       delivering: "bg-purple-100 text-purple-800",
       delivered: "bg-green-100 text-green-800",
       cancelled: "bg-red-100 text-red-800",
@@ -258,13 +254,30 @@ const ProfilePage: React.FC = () => {
       {activeTab === "favorites" && (
         <div>
           <h2 className="text-lg font-semibold mb-4">Избранное</h2>
-          <div className="text-center py-12 bg-[#F5F3F0] dark:bg-[#2D2A26] rounded-2xl">
-            <Heart className="w-12 h-12 mx-auto mb-4 text-[#2D2A26]/30 dark:text-[#E8E6E3]/30" />
-            <p className="text-[#2D2A26]/60 dark:text-[#E8E6E3]/60 mb-4">Нет избранных ресторанов</p>
-            <Link href="/catalog" className="text-primary dark:text-primary-dark font-medium">
-              Выбрать ресторан
-            </Link>
-          </div>
+          {favorites.length === 0 ? (
+            <div className="text-center py-12 bg-[#F5F3F0] dark:bg-[#2D2A26] rounded-2xl">
+              <Heart className="w-12 h-12 mx-auto mb-4 text-[#2D2A26]/30 dark:text-[#E8E6E3]/30" />
+              <p className="text-[#2D2A26]/60 dark:text-[#E8E6E3]/60 mb-4">Нет избранных ресторанов</p>
+              <Link href="/catalog" className="text-primary dark:text-primary-dark font-medium">
+                Выбрать ресторан
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {favorites.map((rest) => (
+                <Link
+                  key={rest.id}
+                  href={`/restaurant/${rest.id}`}
+                  className="block bg-[#F5F3F0] dark:bg-[#2D2A26] rounded-2xl p-4 hover:opacity-90 transition-opacity"
+                >
+                  <p className="font-medium">{rest.name}</p>
+                  {rest.address && (
+                    <p className="text-sm text-[#2D2A26]/60 dark:text-[#E8E6E3]/60">{rest.address}</p>
+                  )}
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

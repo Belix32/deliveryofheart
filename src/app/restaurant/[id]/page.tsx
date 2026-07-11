@@ -7,8 +7,18 @@ import { Star, Clock, MapPin, ArrowLeft, Package, Check, ChefHat, Truck, UserChe
 import Link from "next/link";
 import { fetchRestaurants, fetchRestaurantById, fetchRestaurantMenu, fetchCategories, fetchMenuItems, Restaurant, Category, MenuItem } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
-import { updateOrderStatus, getRestaurantOrders, checkRestaurantOrderAccess, RestaurantOrder } from "@/lib/api/orders";
 import DishCard from "@/components/DishCard";
+
+interface RestaurantOrder {
+  id: string;
+  order_number: string;
+  status: string;
+  total_amount: number;
+  final_amount: number;
+  created_at: string;
+  users?: { full_name: string; phone: string };
+  order_items?: { name: string; quantity: number; price: number }[];
+}
 
 const RestaurantPage: React.FC = () => {
   const params = useParams();
@@ -25,7 +35,7 @@ const RestaurantPage: React.FC = () => {
   const [orders, setOrders] = useState<RestaurantOrder[]>([]);
   const [orderLoading, setOrderLoading] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [orderError, setOrderError] = useState<string | null>(null);
 
   useEffect(() => {
     loadRestaurantData();
@@ -42,21 +52,23 @@ const RestaurantPage: React.FC = () => {
     if (!user?.id || !restaurantId) return;
     
     setOrderLoading(true);
-    setError(null);
+    setOrderError(null);
     
     try {
-      // Проверяем права доступа
-      const access = await checkRestaurantOrderAccess(user.id, restaurantId);
-      setHasAccess(access);
-      
-      if (access) {
-        // Загружаем заказы ресторана
-        const restaurantOrders = await getRestaurantOrders(restaurantId);
-        setOrders(restaurantOrders);
+      const res = await fetch(`/api/restaurant/orders?restaurant_id=${restaurantId}`);
+      if (res.status === 403) {
+        setHasAccess(false);
+        return;
       }
+      if (!res.ok) {
+        throw new Error("Failed to load orders");
+      }
+      const data = await res.json();
+      setHasAccess(true);
+      setOrders(data.orders || []);
     } catch (err) {
       console.error("Ошибка проверки доступа:", err);
-      setError("Ошибка загрузки заказов");
+      setOrderError("Ошибка загрузки заказов");
     } finally {
       setOrderLoading(false);
     }
@@ -91,21 +103,27 @@ const RestaurantPage: React.FC = () => {
     if (!user?.id) return;
     
     setOrderLoading(true);
-    setError(null);
+    setOrderError(null);
     
     try {
-      const success = await updateOrderStatus(orderId, newStatus, '', user.id);
+      const res = await fetch(`/api/orders/${orderId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
       
-      if (success) {
-        // Перезагружаем заказы
-        const restaurantOrders = await getRestaurantOrders(restaurantId);
-        setOrders(restaurantOrders);
+      if (res.ok) {
+        const ordersRes = await fetch(`/api/restaurant/orders?restaurant_id=${restaurantId}`);
+        if (ordersRes.ok) {
+          const data = await ordersRes.json();
+          setOrders(data.orders || []);
+        }
       } else {
-        setError("Не удалось обновить статус");
+        setOrderError("Не удалось обновить статус");
       }
     } catch (err) {
       console.error("Ошибка обновления статуса:", err);
-      setError("Ошибка обновления статуса");
+      setOrderError("Ошибка обновления статуса");
     } finally {
       setOrderLoading(false);
     }
@@ -118,7 +136,6 @@ const RestaurantPage: React.FC = () => {
       confirmed: 'preparing',
       preparing: 'ready',
       ready: 'waiting_courier',
-      waiting_courier: 'in_delivery',
     };
     return statusFlow[currentStatus] || null;
   };
@@ -193,17 +210,6 @@ const RestaurantPage: React.FC = () => {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
-
-  // Сообщение об ошибке
-  if (error) {
-    return (
-      <div className="p-4">
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-600 dark:text-red-400">
-          {error}
-        </div>
       </div>
     );
   }
@@ -329,6 +335,12 @@ const RestaurantPage: React.FC = () => {
       {hasAccess && (
         <div className="px-4 py-6 border-t border-[#F5F3F0] dark:border-[#3D3A36]">
           <h2 className="text-lg font-display font-semibold mb-4">Заказы ресторана</h2>
+
+          {orderError && (
+            <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
+              {orderError}
+            </div>
+          )}
           
           {orderLoading && orders.length === 0 ? (
             <div className="flex items-center justify-center py-8">

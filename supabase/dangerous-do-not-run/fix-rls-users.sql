@@ -1,3 +1,6 @@
+-- !!! DANGEROUS — DO NOT RUN IN PRODUCTION (opens RLS) !!!
+-- See README.md in this folder.
+
 -- Fix RLS for user table - allow INSERT for registration
 -- Run in Supabase SQL Editor
 

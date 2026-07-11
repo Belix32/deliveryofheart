@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { formatPhoneE164, APP_CITY } from "@/lib/config";
+import {
+  ORDER_TRANSITIONS,
+  canTransitionOrderStatus,
+  normalizeOrderStatus,
+} from "@/lib/order-transitions";
 
 describe("config", () => {
   it("defaults city to Сураж", () => {
@@ -13,22 +18,23 @@ describe("config", () => {
 });
 
 describe("order status transitions", () => {
-  const validTransitions: Record<string, string[]> = {
-    pending: ["confirmed", "cancelled"],
-    confirmed: ["preparing", "cancelled"],
-    preparing: ["ready", "cancelled"],
-    ready: ["waiting_courier", "cancelled"],
-    waiting_courier: ["in_delivery", "cancelled"],
-    in_delivery: ["delivered", "cancelled"],
-    delivered: [],
-    cancelled: [],
-  };
-
   it("allows pending to confirmed", () => {
-    expect(validTransitions.pending).toContain("confirmed");
+    expect(ORDER_TRANSITIONS.pending).toContain("confirmed");
   });
 
   it("does not allow delivered to pending", () => {
-    expect(validTransitions.delivered).not.toContain("pending");
+    expect(ORDER_TRANSITIONS.delivered).not.toContain("pending");
+  });
+
+  it("allows customer to cancel pending order", () => {
+    expect(canTransitionOrderStatus("pending", "cancelled", "customer")).toBe(true);
+  });
+
+  it("blocks customer from setting delivered", () => {
+    expect(canTransitionOrderStatus("pending", "delivered", "customer")).toBe(false);
+  });
+
+  it("normalizes legacy delivering status", () => {
+    expect(normalizeOrderStatus("delivering")).toBe("in_delivery");
   });
 });

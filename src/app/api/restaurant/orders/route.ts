@@ -1,15 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getRestaurantOrders, checkIsAdmin } from "@/lib/api/orders";
+import {
+  getRestaurantOrders,
+  checkRestaurantOrderAccess,
+} from "@/lib/api/orders";
+import { isPlatformAdmin } from "@/lib/auth/admin-access";
 
 export async function GET(request: NextRequest) {
   const result = await withAuth(async (userId) => {
-    const isAdmin = await checkIsAdmin(userId);
+    const isAdmin = await isPlatformAdmin(userId);
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status") || undefined;
     const limit = parseInt(searchParams.get("limit") || "20", 10);
     const offset = parseInt(searchParams.get("offset") || "0", 10);
+    const restaurantIdParam = searchParams.get("restaurant_id") || undefined;
+
+    if (restaurantIdParam) {
+      if (!isAdmin) {
+        const hasAccess = await checkRestaurantOrderAccess(userId, restaurantIdParam);
+        if (!hasAccess) {
+          return NextResponse.json({ error: "Доступ запрещён" }, { status: 403 });
+        }
+      }
+
+      const orders = await getRestaurantOrders(restaurantIdParam, status);
+      const paginatedOrders = orders.slice(offset, offset + limit);
+
+      return NextResponse.json({
+        orders: paginatedOrders,
+        total: orders.length,
+        limit,
+        offset,
+        hasAccess: true,
+      });
+    }
 
     if (!isAdmin) {
       const admin = createAdminClient();

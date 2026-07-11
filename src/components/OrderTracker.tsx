@@ -277,12 +277,15 @@ export default function OrderTracker({ orderId, onClose }: OrderTrackerProps) {
             if (!confirm('Отменить заказ?')) return;
             
             try {
-              await supabase
-                .from('orders')
-                .update({ status: 'cancelled', status_updated_at: new Date().toISOString() })
-                .eq('id', order.id);
+              const res = await fetch(`/api/orders/${order.id}/status`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status: "cancelled", note: "Отменён клиентом" }),
+              });
               
-              fetchOrder();
+              if (res.ok) {
+                fetchOrder();
+              }
             } catch (err) {
               console.error('[Cancel] Error:', err);
             }

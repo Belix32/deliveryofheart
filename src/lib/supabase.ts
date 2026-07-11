@@ -36,6 +36,7 @@ export const fetchRestaurantById = async (restaurantId: string): Promise<Restaur
     .from("restaurants")
     .select("*")
     .eq("id", restaurantId)
+    .eq("is_active", true)
     .single();
 
   if (error) {
@@ -147,21 +148,6 @@ export const fetchUserOrders = async (userId: string): Promise<Order[]> => {
     return [];
   }
   return data || [];
-};
-
-export const updateOrderStatus = async (orderId: string, status: string) => {
-  const { data, error } = await supabase
-    .from("orders")
-    .update({ status })
-    .eq("id", orderId)
-    .select()
-    .single();
-
-  if (error) {
-    console.error("Error updating order:", error);
-    return null;
-  }
-  return data;
 };
 
 export const fetchAllOrders = async () => {

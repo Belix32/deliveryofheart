@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withCourier } from "@/lib/auth/api-auth";
 import { getCourierProfile, acceptOrder, updateOrderStatus } from "@/lib/api/couriers";
+import { APP_CITY } from "@/lib/config";
 
 export async function POST(
   request: NextRequest,
@@ -17,10 +18,14 @@ export async function POST(
     const { action } = body;
 
     if (action === "accept") {
-      if (!profile.is_online) {
+      if (profile.status !== "online") {
         return NextResponse.json({ error: "Выйдите на линию, чтобы принять заказ" }, { status: 400 });
       }
-      const success = await acceptOrder(orderId, profile.id);
+      const success = await acceptOrder(
+        orderId,
+        profile.id,
+        profile.current_city || APP_CITY
+      );
       if (!success) {
         return NextResponse.json({ error: "Failed to accept order" }, { status: 400 });
       }
