@@ -41,9 +41,9 @@ async function syncProfile(
   data?: { full_name?: string; phone?: string }
 ) {
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session?.user) return null;
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
 
   const response = await fetch("/api/auth/sync-profile", {
     method: "POST",

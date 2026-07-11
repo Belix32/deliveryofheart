@@ -1,3 +1,4 @@
+import { isValidBannerImageUrl, isValidBannerLinkUrl } from "@/lib/admin/banner-urls";
 import { createClient } from "@/lib/supabase/server";
 import { APP_CITY } from "@/lib/config";
 
@@ -14,7 +15,8 @@ export async function fetchActiveBannersServer(city = APP_CITY): Promise<PublicB
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("banners")
-    .select("id, title, subtitle, image_url, link_url, sort_order")
+    .select("id, title, subtitle, image_url, link_url, sort_order, starts_at, ends_at")
+    .eq("is_active", true)
     .or(`city.is.null,city.eq.${city}`)
     .order("sort_order", { ascending: true });
 
@@ -23,5 +25,14 @@ export async function fetchActiveBannersServer(city = APP_CITY): Promise<PublicB
     return [];
   }
 
-  return (data || []) as PublicBanner[];
+  const nowMs = Date.now();
+  return (data || []).filter((banner) => {
+    const starts = banner.starts_at ? new Date(banner.starts_at as string).getTime() : 0;
+    const ends = banner.ends_at ? new Date(banner.ends_at as string).getTime() : Infinity;
+    if (!(starts <= nowMs && ends >= nowMs)) return false;
+    return (
+      isValidBannerImageUrl(banner.image_url as string) &&
+      isValidBannerLinkUrl(banner.link_url as string | null)
+    );
+  }) as PublicBanner[];
 }

@@ -7,7 +7,7 @@
 --   "infinite recursion detected in policy for relation user_roles"
 --
 -- Как применить:
---   1. Supabase Dashboard → проект delivery (raafwoxicqyywpzjgovz)
+--   1. Supabase Dashboard → ваш проект → SQL Editor → New query
 --   2. SQL Editor → New query
 --   3. Вставьте весь этот файл → Run
 --
@@ -177,7 +177,7 @@ CREATE POLICY "order_status_history_select" ON public.order_status_history
 -- =============================================================================
 -- 4. (ОПЦИОНАЛЬНО) Назначить себе роль admin
 -- =============================================================================
--- Админ-панель: https://deliveryheart.vercel.app/admin
+-- Админ-панель: /admin на вашем домене
 -- Без роли admin middleware перенаправит на главную.
 --
 -- Шаг 1 — узнайте свой user_id:

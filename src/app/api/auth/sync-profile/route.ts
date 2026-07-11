@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizePhone } from "@/lib/phone";
-import { APP_CITY } from "@/lib/config";
 
 async function isPhoneTaken(phone: string, excludeUserId?: string): Promise<boolean> {
   const admin = createAdminClient();
@@ -20,14 +19,15 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const fullName = body.full_name as string | undefined;
-    const phone = body.phone as string | undefined;
+    const fullName =
+      typeof body.full_name === "string" ? body.full_name.trim().slice(0, 120) : undefined;
+    const phone = typeof body.phone === "string" ? body.phone : undefined;
+
+    // Only trust explicit request body for phone — never JWT user_metadata.
+    const normalizedPhone = phone ? normalizePhone(phone) : null;
 
     const admin = createAdminClient();
     const email = authUser.email || `${authUser.id}@users.local`;
-    const normalizedPhone = phone
-      ? normalizePhone(phone)
-      : normalizePhone(authUser.user_metadata?.phone as string | undefined);
 
     if (normalizedPhone && (await isPhoneTaken(normalizedPhone, authUser.id))) {
       return NextResponse.json(
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
         id: authUser.id,
         email,
         phone: normalizedPhone,
-        full_name: fullName || authUser.user_metadata?.full_name || null,
+        full_name: fullName || null,
       })
       .select()
       .single();
@@ -98,9 +98,6 @@ export async function POST(request: NextRequest) {
         { onConflict: "user_id,role_id,restaurant_id" }
       );
     }
-
-    // Ensure courier profile uses app city if created later
-    void APP_CITY;
 
     return NextResponse.json({ profile });
   } catch (error) {

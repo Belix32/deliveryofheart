@@ -44,39 +44,25 @@ Supabase → **SQL Editor** → выполните целиком:
 SELECT id, email FROM auth.users ORDER BY created_at;
 ```
 
-2. Вставьте UUID и выполните:
+2. Вставьте UUID и выполните `supabase/INSERT-ADMIN-ROLE.sql` (замените `YOUR_USER_UUID`).
 
-```sql
-INSERT INTO public.user_roles (user_id, role_id, restaurant_id, is_active)
-SELECT
-  'ВАШ_UUID'::uuid,
-  r.id,
-  NULL,
-  TRUE
-FROM public.roles r
-WHERE r.name = 'admin'
-ON CONFLICT DO NOTHING;
-```
-
-3. Проверка:
-
-```sql
-SELECT u.email, r.name, ur.is_active
-FROM public.user_roles ur
-JOIN public.roles r ON r.id = ur.role_id
-JOIN auth.users u ON u.id = ur.user_id
-WHERE r.name = 'admin';
-```
+   Скрипт также записывает `platform_admin_user_id` в `app_settings` — это должно совпадать с `ADMIN_USER_ID` в Vercel (нужно для RLS в БД).
 
 ### C) Ошибка RLS «infinite recursion»
 
 Сначала выполните: `supabase/PRODUCTION-PATCH-RLS-RECURSION.sql`
+
+### D) Синхронизация RLS с ADMIN_USER_ID
+
+Выполните: `supabase/PRODUCTION-PATCH-PLATFORM-ADMIN-RLS.sql`, затем `supabase/INSERT-ADMIN-ROLE.sql`.
 
 ## 3. Безопасность
 
 - Без `ADMIN_USER_ID` — никто не попадёт в `/admin` (middleware + `requireAdmin`).
 - Роль `admin` **не назначается** через UI (`/admin/users`, `/admin/restaurant-admins` возвращают 403).
 - `ADMIN_USER_ID` — серверная переменная (не `NEXT_PUBLIC_*`).
+- RLS в PostgreSQL проверяет тот же UUID через `app_settings.platform_admin_user_id` — произвольный `admin` в `user_roles` не сможет менять admin-таблицы через PostgREST.
+- URL баннеров валидируются на сервере: изображения — Supabase Storage или allowlist; ссылки — относительные пути или HTTPS на домен приложения.
 
 ## 4. Redeploy на Vercel
 

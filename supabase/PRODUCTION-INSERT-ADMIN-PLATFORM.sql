@@ -2,7 +2,7 @@
 -- PRODUCTION-INSERT-ADMIN-PLATFORM.sql
 -- =============================================================================
 -- КУДА ВСТАВИТЬ:
---   Supabase Dashboard → проект delivery (raafwoxicqyywpzjgovz)
+--   Supabase Dashboard → ваш проект → SQL Editor
 --   → SQL Editor → New query → вставьте ВЕСЬ этот файл → Run
 --
 -- КОГДА ПРИМЕНЯТЬ:

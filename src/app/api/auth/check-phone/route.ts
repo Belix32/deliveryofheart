@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizePhone } from "@/lib/phone";
+import {
+  checkRateLimit,
+  clientIpFromRequest,
+  rateLimitResponse,
+} from "@/lib/security/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
+    const ip = clientIpFromRequest(request);
+    const limited = checkRateLimit(`auth:check-phone:${ip}`, 20, 15 * 60 * 1000);
+    if (!limited.allowed) {
+      return rateLimitResponse(limited.retryAfterSec);
+    }
+
     const body = await request.json().catch(() => ({}));
     const normalized = normalizePhone(body.phone as string | undefined);
 
@@ -12,6 +23,15 @@ export async function POST(request: NextRequest) {
         { available: false, error: "Введите корректный номер телефона" },
         { status: 400 }
       );
+    }
+
+    const phoneLimited = checkRateLimit(
+      `auth:check-phone:phone:${normalized}`,
+      10,
+      15 * 60 * 1000
+    );
+    if (!phoneLimited.allowed) {
+      return rateLimitResponse(phoneLimited.retryAfterSec);
     }
 
     const admin = createAdminClient();

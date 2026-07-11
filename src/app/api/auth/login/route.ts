@@ -4,17 +4,37 @@ import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
 import { normalizePhone } from "@/lib/phone";
+import {
+  checkRateLimit,
+  clientIpFromRequest,
+  rateLimitResponse,
+} from "@/lib/security/rate-limit";
 
 const INVALID_CREDENTIALS = "Неверный телефон или пароль";
 
 export async function POST(request: NextRequest) {
   try {
+    const ip = clientIpFromRequest(request);
+    const limited = checkRateLimit(`auth:login:${ip}`, 10, 15 * 60 * 1000);
+    if (!limited.allowed) {
+      return rateLimitResponse(limited.retryAfterSec);
+    }
+
     const body = await request.json().catch(() => ({}));
     const password = body.password as string | undefined;
     const normalizedPhone = normalizePhone(body.phone as string | undefined);
 
     if (!normalizedPhone || !password) {
       return NextResponse.json({ error: INVALID_CREDENTIALS }, { status: 401 });
+    }
+
+    const phoneLimited = checkRateLimit(
+      `auth:login:phone:${normalizedPhone}`,
+      8,
+      15 * 60 * 1000
+    );
+    if (!phoneLimited.allowed) {
+      return rateLimitResponse(phoneLimited.retryAfterSec);
     }
 
     const admin = createAdminClient();

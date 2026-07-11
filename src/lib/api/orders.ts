@@ -73,7 +73,6 @@ export async function updateOrderStatus(
   changedBy?: string,
   role: "customer" | "restaurant" | "admin" | "courier" = "restaurant"
 ): Promise<boolean> {
-  console.log('[orders.api] updateOrderStatus called:', { orderId, status, note, changedBy, role });
 
   if (!isValidOrderStatus(status)) {
     console.error('[orders.api] Неверный статус:', status);
@@ -127,7 +126,6 @@ export async function updateOrderStatus(
     // Продолжаем, даже если не удалось записать историю
   }
 
-  console.log('[orders.api] Статус заказа успешно обновлён');
   return true;
 }
 
@@ -141,7 +139,6 @@ export async function getRestaurantOrders(
   restaurantId: string,
   status?: string
 ): Promise<RestaurantOrder[]> {
-  console.log('[orders.api] getRestaurantOrders called:', { restaurantId, status });
 
   let query = db()
     .from('orders')
@@ -164,7 +161,6 @@ export async function getRestaurantOrders(
     return [];
   }
 
-  console.log('[orders.api] Получено заказов:', data?.length || 0);
   return data || [];
 }
 
@@ -174,7 +170,6 @@ export async function getRestaurantOrders(
  * @returns Массив записей истории
  */
 export async function getOrderHistory(orderId: string): Promise<StatusHistory[]> {
-  console.log('[orders.api] getOrderHistory called:', orderId);
 
   const { data, error } = await db()
     .from('order_status_history')
@@ -200,7 +195,6 @@ export async function checkRestaurantOrderAccess(
   userId: string,
   restaurantId: string
 ): Promise<boolean> {
-  console.log('[orders.api] checkRestaurantOrderAccess called:', { userId, restaurantId });
 
   const { data: userRoles, error } = await db()
     .from('user_roles')
@@ -219,7 +213,6 @@ export async function checkRestaurantOrderAccess(
     (ur: any) => ur.roles?.name === 'restaurant_owner' || ur.roles?.name === 'restaurant_admin'
   );
 
-  console.log('[orders.api] Проверка прав:', hasAccess ? 'доступ разрешён' : 'доступ запрещён');
   return hasAccess || false;
 }
 
@@ -229,7 +222,6 @@ export async function checkRestaurantOrderAccess(
  * @returns true если пользователь админ
  */
 export async function checkIsAdmin(userId: string): Promise<boolean> {
-  console.log('[orders.api] checkIsAdmin called:', userId);
 
   const { data: userRoles, error } = await db()
     .from('user_roles')
@@ -252,7 +244,6 @@ export async function checkIsAdmin(userId: string): Promise<boolean> {
  * @returns ID ресторана или null
  */
 export async function getUserRestaurantId(userId: string): Promise<string | null> {
-  console.log('[orders.api] getUserRestaurantId called:', userId);
 
   const { data: userRoles, error } = await db()
     .from('user_roles')

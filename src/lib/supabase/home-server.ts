@@ -4,6 +4,7 @@ import { APP_CITY } from "@/lib/config";
 import type { Restaurant } from "@/lib/types";
 import type { GroceryStore, FoodCategoryGroup } from "@/lib/types/grocery";
 import type { PublicBanner } from "@/lib/supabase/banners-server";
+import { isValidBannerImageUrl, isValidBannerLinkUrl } from "@/lib/admin/banner-urls";
 
 const RESTAURANT_COLUMNS =
   "id, name, slug, description, logo_url, cover_url, address, phone, rating, review_count, delivery_time_min, delivery_time_max, delivery_price, min_order_amount, is_active, city";
@@ -55,7 +56,11 @@ async function fetchHomePageDataUncached(city: string): Promise<HomePageData> {
   const banners = bannersRaw.filter((b) => {
     const starts = b.starts_at ? new Date(b.starts_at as string).getTime() : 0;
     const ends = b.ends_at ? new Date(b.ends_at as string).getTime() : Infinity;
-    return starts <= nowMs && ends >= nowMs;
+    if (!(starts <= nowMs && ends >= nowMs)) return false;
+    return (
+      isValidBannerImageUrl(b.image_url as string) &&
+      isValidBannerLinkUrl(b.link_url as string | null)
+    );
   }) as PublicBanner[];
 
   const restaurantIds = restaurants.map((r) => r.id);

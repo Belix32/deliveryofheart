@@ -16,7 +16,6 @@ function db() {
  * Получить профиль текущего курьера по user_id
  */
 export async function getCourierProfile(userId: string): Promise<Courier | null> {
-  console.log('[couriers.api] getCourierProfile called with userId:', userId);
   
   const { data, error } = await db()
     .from('couriers')
@@ -36,7 +35,6 @@ export async function getCourierProfile(userId: string): Promise<Courier | null>
  * Получить профиль курьера по courier_id
  */
 export async function getCourierProfileById(courierId: string): Promise<Courier | null> {
-  console.log('[couriers.api] getCourierProfileById called with courierId:', courierId);
   
   const { data, error } = await db()
     .from('couriers')
@@ -77,7 +75,6 @@ export async function upsertCourierProfile(
   userId: string,
   data: Partial<Courier>
 ): Promise<Courier | null> {
-  console.log('[couriers.api] upsertCourierProfile called with userId:', userId, 'data:', data);
   
   const safeFields = pickCourierProfileFields(data);
 
@@ -131,7 +128,6 @@ export async function setCourierStatus(
   courierId: string,
   status: 'online' | 'offline' | 'busy'
 ): Promise<boolean> {
-  console.log('[couriers.api] setCourierStatus called with courierId:', courierId, 'status:', status);
   
   const { error } = await db()
     .from('couriers')
@@ -157,7 +153,6 @@ export async function setCourierStatus(
  * Получить доступные заказы для курьера в городе
  */
 export async function getAvailableOrders(city: string): Promise<any[]> {
-  console.log('[couriers.api] getAvailableOrders called with city:', city);
   
   // Orders ready for courier pickup
   const { data, error } = await db()
@@ -166,7 +161,7 @@ export async function getAvailableOrders(city: string): Promise<any[]> {
       *,
       restaurants (name, address, phone)
     `)
-    .in('status', ['waiting_courier', 'ready'])
+    .in('status', ['waiting_courier'])
     .is('courier_id', null)
     .eq('delivery_city', city)
     .order('created_at', { ascending: false })
@@ -184,7 +179,6 @@ export async function getAvailableOrders(city: string): Promise<any[]> {
  * Получить все заказы (независимо от статуса) для курьера
  */
 export async function getOrdersForCourier(courierId: string): Promise<any[]> {
-  console.log('[couriers.api] getOrdersForCourier called with courierId:', courierId);
   
   // Get order_ids assigned to this courier
   const { data: courierOrders } = await db()
@@ -216,11 +210,15 @@ export async function getOrdersForCourier(courierId: string): Promise<any[]> {
 }
 
 /**
- * Принять заказ
+ * Принять заказ (только waiting_courier в городе курьера)
  */
-export async function acceptOrder(orderId: string, courierId: string): Promise<boolean> {
-  console.log('[couriers.api] acceptOrder called with orderId:', orderId, 'courierId:', courierId);
+export async function acceptOrder(
+  orderId: string,
+  courierId: string,
+  deliveryCity: string
+): Promise<boolean> {
   const admin = db();
+  const city = deliveryCity?.trim() || APP_CITY;
 
   const { data: claimed, error: claimError } = await admin
     .from('orders')
@@ -231,7 +229,8 @@ export async function acceptOrder(orderId: string, courierId: string): Promise<b
       status_updated_at: new Date().toISOString(),
     })
     .eq('id', orderId)
-    .in('status', ['waiting_courier', 'ready'])
+    .eq('status', 'waiting_courier')
+    .eq('delivery_city', city)
     .is('courier_id', null)
     .select('id')
     .maybeSingle();
@@ -284,7 +283,6 @@ export async function updateOrderStatus(
   courierId: string,
   status: 'accepted' | 'picked_up' | 'in_delivery' | 'delivered' | 'cancelled' | 'failed'
 ): Promise<boolean> {
-  console.log('[couriers.api] updateOrderStatus called with orderId:', orderId, 'status:', status);
   
   // Find courier_order
   const { data: courierOrder } = await db()
@@ -361,7 +359,6 @@ export async function getCourierOrders(
   courierId: string,
   status?: string
 ): Promise<CourierOrder[]> {
-  console.log('[couriers.api] getCourierOrders called with courierId:', courierId, 'status:', status);
   
   let query = db()
     .from('courier_orders')
@@ -396,7 +393,6 @@ export async function getCourierEarnings(
   courierId: string,
   period: 'daily' | 'weekly' | 'monthly' = 'daily'
 ): Promise<CourierEarnings[]> {
-  console.log('[couriers.api] getCourierEarnings called with courierId:', courierId, 'period:', period);
   
   let startDate: string;
   const now = new Date();
@@ -434,7 +430,6 @@ export async function getCourierEarnings(
  * Получить статистику курьера
  */
 export async function getCourierStats(courierId: string): Promise<CourierStatsSummary> {
-  console.log('[couriers.api] getCourierStats called with courierId:', courierId);
   
   const now = new Date();
   const todayStr = now.toISOString().split('T')[0];
@@ -496,7 +491,6 @@ export async function getAllCouriers(filters?: {
   city?: string;
   isActive?: boolean;
 }): Promise<Courier[]> {
-  console.log('[couriers.api] getAllCouriers called with filters:', filters);
   
   let query = db()
     .from('couriers')

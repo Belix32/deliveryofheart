@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { APP_CITY } from "@/lib/config";
+import { isAllowedPaymentMethod, normalizePaymentMethod } from "@/lib/orders/payment-method";
 
 interface CheckoutItem {
   menu_item_id: string;
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
       apartment,
       comment,
       coupon_code,
-      payment_method = "cash",
+      payment_method: rawPaymentMethod = "cash",
     } = body as {
       restaurant_id: string;
       items: CheckoutItem[];
@@ -34,6 +35,11 @@ export async function POST(request: NextRequest) {
     if (!restaurant_id || !items?.length || !address_text?.trim()) {
       return NextResponse.json({ error: "Неполные данные заказа" }, { status: 400 });
     }
+
+    if (rawPaymentMethod != null && !isAllowedPaymentMethod(rawPaymentMethod)) {
+      return NextResponse.json({ error: "Неверный способ оплаты" }, { status: 400 });
+    }
+    const payment_method = normalizePaymentMethod(rawPaymentMethod);
 
     const admin = createAdminClient();
 
@@ -115,6 +121,7 @@ export async function POST(request: NextRequest) {
         .select("*")
         .eq("code", coupon_code.toUpperCase())
         .eq("is_active", true)
+        .eq("scope", "food")
         .maybeSingle();
 
       if (coupon) {

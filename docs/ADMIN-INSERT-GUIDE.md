@@ -12,7 +12,7 @@
 Если в личном кабинете была ошибка `infinite recursion` — **сначала** выполните:
 `supabase/PRODUCTION-PATCH-RLS-RECURSION.sql`
 
-В том же SQL-файле в конце — раскомментируйте блок **«Назначить себе роль admin»** и подставьте свой UUID.
+Затем выполните `supabase/PRODUCTION-PATCH-PLATFORM-ADMIN-RLS.sql` и назначьте admin через `supabase/INSERT-ADMIN-ROLE.sql` (подставьте свой UUID).
 
 ---
 
@@ -21,11 +21,12 @@
 **Settings → Environment Variables** → добавьте или проверьте:
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=https://raafwoxicqyywpzjgovz.supabase.co
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=ваш-anon-key
 SUPABASE_SERVICE_ROLE_KEY=ваш-service-role-key
 NEXT_PUBLIC_CITY=Сураж
 ADMIN_USER_ID=ваш-uuid-из-auth.users
+NEXT_PUBLIC_APP_URL=https://your-app.vercel.app
 ```
 
 UUID узнать в SQL Editor:
@@ -43,11 +44,12 @@ SELECT id, email FROM auth.users ORDER BY created_at;
 Те же переменные, что в Vercel (для разработки):
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=https://raafwoxicqyywpzjgovz.supabase.co
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 SUPABASE_SERVICE_ROLE_KEY=...
 NEXT_PUBLIC_CITY=Сураж
 ADMIN_USER_ID=ваш-uuid
+NEXT_PUBLIC_APP_URL=https://your-app.vercel.app
 ```
 
 ---

@@ -187,32 +187,10 @@ export function subscribeToOrder(orderId: string, callback: (payload: unknown) =
     .subscribe();
 }
 
-export async function validateCoupon(code: string, orderTotal: number) {
-  const { data, error } = await supabase
-    .from("coupons")
-    .select("*")
-    .eq("code", code.toUpperCase())
-    .eq("is_active", true)
-    .maybeSingle();
-
-  if (error || !data) return { valid: false, error: "Промокод не найден" };
-  if (data.valid_to && new Date(data.valid_to) < new Date()) {
-    return { valid: false, error: "Промокод истёк" };
-  }
-  if (data.max_uses && data.used_count >= data.max_uses) {
-    return { valid: false, error: "Промокод исчерпан" };
-  }
-  if (orderTotal < Number(data.min_order_amount)) {
-    return {
-      valid: false,
-      error: `Минимальная сумма заказа ${data.min_order_amount} ₽`,
-    };
-  }
-
-  const discount =
-    data.discount_type === "percent"
-      ? Math.round(orderTotal * (Number(data.discount_value) / 100))
-      : Number(data.discount_value);
-
-  return { valid: true, discount, coupon: data };
+/** Coupons are validated server-side at checkout; clients cannot read coupon rows. */
+export async function validateCoupon(_code: string, _orderTotal: number) {
+  return {
+    valid: false as const,
+    error: "Промокод проверяется при оформлении заказа",
+  };
 }

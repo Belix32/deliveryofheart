@@ -4,9 +4,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   updateOrderStatus,
   checkRestaurantOrderAccess,
-  checkIsAdmin,
   getOrderHistory,
 } from "@/lib/api/orders";
+import { isPlatformAdmin } from "@/lib/auth/admin-access";
 
 const VALID_STATUSES = [
   "pending",
@@ -37,7 +37,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Заказ не найден" }, { status: 404 });
     }
 
-    const isAdmin = await checkIsAdmin(userId);
+    const isAdmin = await isPlatformAdmin(userId);
     const hasRestaurantAccess = await checkRestaurantOrderAccess(userId, order.restaurant_id);
     const isOwner = order.user_id === userId;
 
@@ -85,7 +85,7 @@ export async function GET(
       return NextResponse.json({ error: "Заказ не найден" }, { status: 404 });
     }
 
-    const isAdmin = await checkIsAdmin(userId);
+    const isAdmin = await isPlatformAdmin(userId);
     const hasRestaurantAccess = await checkRestaurantOrderAccess(userId, order.restaurant_id);
     const isOwner = order.user_id === userId;
 

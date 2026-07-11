@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { APP_CITY } from "@/lib/config";
+import { isAllowedPaymentMethod, normalizePaymentMethod } from "@/lib/orders/payment-method";
 
 interface GroceryCheckoutItem {
   product_id: string;
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
       floor,
       comment,
       coupon_code,
-      payment_method = "cash",
+      payment_method: rawPaymentMethod = "cash",
     } = body as {
       store_id: string;
       items: GroceryCheckoutItem[];
@@ -37,6 +38,11 @@ export async function POST(request: NextRequest) {
     if (!store_id || !items?.length || !address_text?.trim()) {
       return NextResponse.json({ error: "Неполные данные заказа" }, { status: 400 });
     }
+
+    if (rawPaymentMethod != null && !isAllowedPaymentMethod(rawPaymentMethod)) {
+      return NextResponse.json({ error: "Неверный способ оплаты" }, { status: 400 });
+    }
+    const payment_method = normalizePaymentMethod(rawPaymentMethod);
 
     const admin = createAdminClient();
 

@@ -1,0 +1,7 @@
+-- =============================================================================
+-- DANGEROUS — DO NOT RUN IN PRODUCTION
+-- =============================================================================
+-- These scripts open RLS with USING (true) / WITH CHECK (true).
+-- Kept only for historical emergency recovery reference.
+-- Applying them exposes orders, addresses, and PII to any client.
+-- =============================================================================

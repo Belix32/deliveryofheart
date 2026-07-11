@@ -1,3 +1,6 @@
+-- !!! DANGEROUS — DO NOT RUN IN PRODUCTION (opens RLS) !!!
+-- See README.md in this folder.
+
 -- =====================================================
 -- EMERGENCY RLS FIX - Execute this in Supabase SQL Editor
 -- =====================================================

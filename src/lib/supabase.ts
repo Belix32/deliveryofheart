@@ -150,21 +150,6 @@ export const fetchUserOrders = async (userId: string): Promise<Order[]> => {
   return data || [];
 };
 
-export const updateOrderStatus = async (orderId: string, status: string) => {
-  const { data, error } = await supabase
-    .from("orders")
-    .update({ status })
-    .eq("id", orderId)
-    .select()
-    .single();
-
-  if (error) {
-    console.error("Error updating order:", error);
-    return null;
-  }
-  return data;
-};
-
 export const fetchAllOrders = async () => {
   const { data, error } = await supabase
     .from("orders")

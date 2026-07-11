@@ -63,9 +63,9 @@ export default function UsersPage() {
       setIsLoading(true);
       setError(null);
 
-const { data: { session } } = await supabase.auth.getSession();
+const { data: { user } } = await supabase.auth.getUser();
       
-      if (!session?.user) {
+      if (!user) {
         setError("Требуется авторизация для просмотра пользователей");
         setIsLoading(false);
         return;
@@ -100,7 +100,11 @@ const { data: { session } } = await supabase.auth.getSession();
 
     try {
       setIsAssigning(true);
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setError("Требуется авторизация");
+        return;
+      }
 
       const response = await fetch('/api/admin/users', {
         method: 'POST',
@@ -134,7 +138,11 @@ const { data: { session } } = await supabase.auth.getSession();
 
   const handleRemoveRole = async (userRoleId: string) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setError("Требуется авторизация");
+        return;
+      }
 
       const response = await fetch(`/api/admin/users?user_role_id=${userRoleId}`, {
         method: 'DELETE',

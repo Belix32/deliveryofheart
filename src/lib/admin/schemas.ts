@@ -1,8 +1,28 @@
 import { z } from "zod";
+import { isValidBannerImageUrl, isValidBannerLinkUrl } from "@/lib/admin/banner-urls";
 import { ORDER_STATUSES } from "@/lib/order-transitions";
 
 const uuid = z.string().uuid({ message: "Некорректный UUID" });
 const nonEmptyString = z.string().trim().min(1, "Обязательное поле");
+
+const bannerImageUrl = z
+  .string()
+  .trim()
+  .min(1, "Обязательное поле")
+  .refine(isValidBannerImageUrl, {
+    message:
+      "Допустимы относительные пути или HTTPS: Supabase Storage (/storage/v1/object/public/...) и images.unsplash.com",
+  });
+
+const bannerLinkUrl = z
+  .string()
+  .trim()
+  .optional()
+  .nullable()
+  .refine((value) => isValidBannerLinkUrl(value), {
+    message:
+      "Ссылка: относительный путь (/...) или HTTPS на домен приложения (localhost в dev)",
+  });
 
 export const idQuerySchema = z.object({
   id: uuid,
@@ -15,8 +35,8 @@ export const userRoleIdQuerySchema = z.object({
 export const bannerCreateSchema = z.object({
   title: nonEmptyString,
   subtitle: z.string().trim().optional().nullable(),
-  image_url: nonEmptyString,
-  link_url: z.string().trim().optional().nullable(),
+  image_url: bannerImageUrl,
+  link_url: bannerLinkUrl,
   city: z.string().trim().optional().nullable(),
   starts_at: z.string().optional().nullable(),
   ends_at: z.string().optional().nullable(),
@@ -37,8 +57,8 @@ export const bannerPatchSchema = z
       .optional(),
     title: z.string().trim().optional(),
     subtitle: z.string().trim().optional().nullable(),
-    image_url: z.string().trim().optional(),
-    link_url: z.string().trim().optional().nullable(),
+    image_url: bannerImageUrl.optional(),
+    link_url: bannerLinkUrl,
     city: z.string().trim().optional().nullable(),
     starts_at: z.string().optional().nullable(),
     ends_at: z.string().optional().nullable(),

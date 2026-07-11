@@ -6,7 +6,7 @@
 --   Настройки, Уведомления, Логи.
 --
 -- Как применить:
---   1. Supabase Dashboard → проект delivery (raafwoxicqyywpzjgovz)
+--   1. Supabase Dashboard → ваш проект → SQL Editor → New query
 --   2. SQL Editor → New query
 --   3. Вставьте весь этот файл → Run
 --

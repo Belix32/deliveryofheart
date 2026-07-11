@@ -3,13 +3,13 @@ import { withAuth } from "@/lib/auth/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   getRestaurantOrders,
-  checkIsAdmin,
   checkRestaurantOrderAccess,
 } from "@/lib/api/orders";
+import { isPlatformAdmin } from "@/lib/auth/admin-access";
 
 export async function GET(request: NextRequest) {
   const result = await withAuth(async (userId) => {
-    const isAdmin = await checkIsAdmin(userId);
+    const isAdmin = await isPlatformAdmin(userId);
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status") || undefined;
     const limit = parseInt(searchParams.get("limit") || "20", 10);

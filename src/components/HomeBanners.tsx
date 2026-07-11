@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { isExternalBannerLink } from "@/lib/admin/banner-urls";
 import type { PublicBanner } from "@/lib/supabase/banners-server";
 
 interface HomeBannersProps {
@@ -34,11 +35,15 @@ export default function HomeBanners({ banners }: HomeBannersProps) {
           );
 
           if (banner.link_url) {
+            const external = isExternalBannerLink(banner.link_url);
             return (
               <Link
                 key={banner.id}
                 href={banner.link_url}
                 className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-2xl"
+                {...(external
+                  ? { target: "_blank", rel: "noopener noreferrer" }
+                  : {})}
               >
                 {content}
               </Link>
